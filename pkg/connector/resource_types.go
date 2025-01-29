@@ -8,5 +8,6 @@ import (
 var userResourceType = &v2.ResourceType{
 	Id:          "user",
 	DisplayName: "User",
+	Description: "The Agents are the users for Freshdesk",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_USER},
 }

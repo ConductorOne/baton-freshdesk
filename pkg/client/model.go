@@ -20,7 +20,7 @@ type Agent struct {
 }
 
 type Contact struct {
-	Active      string    `json:"active,omitempty"`
+	Active      bool      `json:"active,omitempty"`
 	Email       string    `json:"email,omitempty"`
 	JobTitle    string    `json:"job_title,omitempty"`
 	Language    string    `json:"language,omitempty"`

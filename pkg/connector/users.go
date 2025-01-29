@@ -2,13 +2,18 @@ package connector
 
 import (
 	"context"
+	"github.com/conductorone/baton-freshdesk/pkg/client"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 )
 
-type userBuilder struct{}
+type userBuilder struct {
+	resourceType *v2.ResourceType
+	client       *client.FreshdeskClient
+}
 
 func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 	return userResourceType
@@ -17,7 +22,76 @@ func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 // List returns all the users from the database as resource objects.
 // Users include a UserTrait because they are the 'shape' of a standard user.
 func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+	var rv []*v2.Resource
+	bag, pageToken, err := getToken(pToken, userResourceType)
+
+	agents, nextPageToken, annotation, err := o.client.ListAgents(ctx, client.PageOptions{
+		Page:    pageToken,
+		PerPage: pToken.Size,
+	})
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	err = bag.Next(nextPageToken)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	for _, agent := range *agents {
+		agentCopy := agent
+		userResource, err := parseIntoUserResource(ctx, &agentCopy, nil)
+		if err != nil {
+			return nil, "", nil, err
+		}
+		rv = append(rv, userResource)
+	}
+
+	nextPageToken, err = bag.Marshal()
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	return rv, nextPageToken, annotation, nil
+}
+
+// This function parses an Agent (users from Freshdesk) into a User Resource
+func parseIntoUserResource(ctx context.Context, agent *client.Agent, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	var userStatus v2.UserTrait_Status_Status = v2.UserTrait_Status_STATUS_ENABLED
+
+	profile := map[string]interface{}{
+		"user_id":    agent.ID,
+		"login":      agent.Contact.Email,
+		"first_name": agent.Contact.Name,
+		"last_name":  agent.Contact.Name,
+		"email":      agent.Contact.Email,
+		"is_agent":   true,
+	}
+
+	userTraits := []rs.UserTraitOption{
+		rs.WithUserProfile(profile),
+		rs.WithStatus(userStatus),
+		rs.WithUserLogin(agent.Contact.Email),
+		rs.WithEmail(agent.Contact.Email, true),
+	}
+
+	displayName := agent.Contact.Name
+	if displayName == "" {
+		displayName = agent.Contact.Email
+	}
+
+	ret, err := rs.NewUserResource(
+		displayName,
+		userResourceType,
+		agent.ID,
+		userTraits,
+		rs.WithParentResourceID(parentResourceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
 }
 
 // Entitlements always returns an empty slice for users.
@@ -30,6 +104,9 @@ func (o *userBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 	return nil, "", nil, nil
 }
 
-func newUserBuilder() *userBuilder {
-	return &userBuilder{}
+func newUserBuilder(c *client.FreshdeskClient) *userBuilder {
+	return &userBuilder{
+		resourceType: userResourceType,
+		client:       c,
+	}
 }
