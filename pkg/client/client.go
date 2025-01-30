@@ -102,6 +102,7 @@ func isValidUrl(urlBase string) bool {
 	return err == nil && u.Scheme != "" && u.Host != ""
 }
 
+// ListAgents Gets all the Agents from Freshdesk and deserialized them into an Array of Agents
 func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]Agent, string, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, allAgents)
 	if err != nil {
@@ -109,8 +110,7 @@ func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]
 	}
 
 	var res *[]Agent
-
-	nextPage, annotation, err := f.getAgentsFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
+	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -118,7 +118,8 @@ func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]
 	return res, nextPage, annotation, nil
 }
 
-func (f *FreshdeskClient) getAgentsFromAPI(
+// getListFromAPI sends a request to the Freshdesk API to receive a JSON with a list of entities
+func (f *FreshdeskClient) getListFromAPI(
 	ctx context.Context,
 	urlAddress string,
 	res any,
@@ -210,4 +211,19 @@ func (f *FreshdeskClient) doRequest(
 func basicAuth(username, password string) string {
 	auth := username + ":" + password
 	return base64.StdEncoding.EncodeToString([]byte(auth))
+}
+
+func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) (*[]Role, string, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, allRoles)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	var res *[]Role
+	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	return res, nextPage, annotation, nil
 }
