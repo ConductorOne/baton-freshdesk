@@ -20,7 +20,7 @@ const (
 
 	// GET
 	allAgents = "/api/v2/agents"
-	allGrous  = "/api/v2/groups "
+	allGrous  = "/api/v2/groups"
 	allRoles  = "/api/v2/roles"
 
 	// PUT
@@ -220,6 +220,21 @@ func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) (*[]R
 	}
 
 	var res *[]Role
+	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	return res, nextPage, annotation, nil
+}
+
+func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) (*[]Group, string, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, allGrous)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	var res *[]Group
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err

@@ -69,16 +69,8 @@ func newRoleBuilder(c *client.FreshdeskClient) *roleBuilder {
 	}
 }
 
-// This function parses a role from Freshdesk into a User Resource
+// This function parses a role from Freshdesk into a Role Resource
 func parseIntoRoleResource(ctx context.Context, role *client.Role, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
-	//profile := map[string]interface{}{
-	//	"id":          role.ID,
-	//	"name":        role.Name,
-	//	"description": role.Description,
-	//	"default":     role.Default,
-	//	"createdAt":   role.CreatedAt,
-	//	"updatedAt":   role.UpdatedAt,
-	//}
 	profile := map[string]interface{}{
 		"id":          role.ID,
 		"name":        role.Name,
