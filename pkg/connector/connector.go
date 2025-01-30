@@ -32,12 +32,12 @@ func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.R
 func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
 	return &v2.ConnectorMetadata{
 		DisplayName: "Freshdesk Connector",
-		Description: "Connector to sync users from Freshdesk.",
+		Description: "Connector to sync users and roles from Freshdesk.",
 	}, nil
 }
 
 // Validate is called to ensure that the connector is properly configured. It should exercise any API credentials
-// to be sure that they are valid.
+// to be sure that they are valid. //TODO Apply validations
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
 	return nil, nil
 }

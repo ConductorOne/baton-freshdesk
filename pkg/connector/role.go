@@ -6,6 +6,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 )
 
 type roleBuilder struct {
@@ -21,7 +22,7 @@ func (r *roleBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	var rv []*v2.Resource
 	bag, pageToken, err := getToken(pToken, roleResourceType)
 
-	agents, nextPageToken, annotation, err := r.client.ListAgents(ctx, client.PageOptions{
+	roles, nextPageToken, annotation, err := r.client.ListRoles(ctx, client.PageOptions{
 		Page:    pageToken,
 		PerPage: pToken.Size,
 	})
@@ -34,13 +35,13 @@ func (r *roleBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		return nil, "", nil, err
 	}
 
-	for _, agent := range *agents {
-		agentCopy := agent
-		userResource, err := parseIntoUserResource(ctx, &agentCopy, nil)
+	for _, role := range *roles {
+		roleCopy := role
+		roleResource, err := parseIntoRoleResource(ctx, &roleCopy, nil)
 		if err != nil {
 			return nil, "", nil, err
 		}
-		rv = append(rv, userResource)
+		rv = append(rv, roleResource)
 	}
 
 	nextPageToken, err = bag.Marshal()
@@ -66,4 +67,32 @@ func newRoleBuilder(c *client.FreshdeskClient) *roleBuilder {
 		resourceType: roleResourceType,
 		client:       c,
 	}
+}
+
+// This function parses a role from Freshdesk into a User Resource
+func parseIntoRoleResource(ctx context.Context, role *client.Role, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	//profile := map[string]interface{}{
+	//	"id":          role.ID,
+	//	"name":        role.Name,
+	//	"description": role.Description,
+	//	"default":     role.Default,
+	//	"createdAt":   role.CreatedAt,
+	//	"updatedAt":   role.UpdatedAt,
+	//}
+	profile := map[string]interface{}{
+		"id":          role.ID,
+		"name":        role.Name,
+		"description": role.Description,
+		"role_type":   1, //role.RoleType,  //TODO Analyze from where does this value come from. What does it represents?
+	}
+	roleTraits := []rs.RoleTraitOption{
+		rs.WithRoleProfile(profile),
+	}
+
+	ret, err := rs.NewRoleResource(role.Name, roleResourceType, role.ID, roleTraits)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
 }
