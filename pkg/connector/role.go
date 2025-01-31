@@ -37,7 +37,7 @@ func (r *roleBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 	for _, role := range *roles {
 		roleCopy := role
-		roleResource, err := parseIntoRoleResource(ctx, &roleCopy, nil)
+		roleResource, err := parseIntoRoleResource(ctx, &roleCopy, parentResourceID)
 		if err != nil {
 			return nil, "", nil, err
 		}
