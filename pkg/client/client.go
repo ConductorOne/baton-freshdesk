@@ -23,6 +23,8 @@ const (
 	allGrous  = "/api/v2/groups"
 	allRoles  = "/api/v2/roles"
 
+	getAgentDetail = "/api/v2/agents" // /[id]
+
 	// PUT
 	updateAgent = "/api/v2/agents" // /[id]
 )
@@ -116,6 +118,21 @@ func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]
 	}
 
 	return res, nextPage, annotation, nil
+}
+
+// GetAgentDetail Gets all the Agents from Freshdesk and deserialized them into an Array of Agents
+func (f *FreshdeskClient) GetAgentDetail(ctx context.Context, agentID string) (*Agent, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, getAgentDetail, agentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	var res *Agent
+	_, annotation, err := f.doRequest(ctx, http.MethodGet, queryUrl, &res, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return res, annotation, nil
 }
 
 // getListFromAPI sends a request to the Freshdesk API to receive a JSON with a list of entities

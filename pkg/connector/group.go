@@ -37,7 +37,7 @@ func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId
 
 	for _, group := range *groups {
 		groupCopy := group
-		userResource, err := parseIntoGroupResource(ctx, &groupCopy, nil)
+		userResource, err := parseIntoGroupResource(ctx, &groupCopy, parentResourceID)
 		if err != nil {
 			return nil, "", nil, err
 		}
