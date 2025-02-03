@@ -142,6 +142,13 @@ func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.To
 }
 
 func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
+	r.agentDetailsMutex.Lock()
+	defer r.agentDetailsMutex.Unlock()
+
+	if r.agentsDetails != nil && len(r.agentsDetails) > 0 {
+		return nil
+	}
+
 	paginationToken := pagination.Token{1, ""}
 	IDs, err := r.GetAllAgentsIDs(ctx, &paginationToken)
 	if err != nil {
