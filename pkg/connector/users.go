@@ -22,6 +22,7 @@ func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 // Users include a UserTrait because they are the 'shape' of a standard user.
 func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var rv []*v2.Resource
+
 	bag, pageToken, err := getToken(pToken, userResourceType)
 
 	agents, nextPageToken, annotation, err := o.client.ListAgents(ctx, client.PageOptions{

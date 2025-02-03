@@ -83,7 +83,7 @@ func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 	}
 
 	for _, agentDetail := range r.agentsDetails {
-		permissionName := "assigned"
+		const permissionName = "assigned"
 
 		value, err := strconv.Atoi(resource.Id.Resource)
 		if err != nil {
@@ -149,7 +149,7 @@ func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
 		return nil
 	}
 
-	paginationToken := pagination.Token{1, ""}
+	paginationToken := pagination.Token{50, ""}
 	IDs, err := r.GetAllAgentsIDs(ctx, &paginationToken)
 	if err != nil {
 		return err
