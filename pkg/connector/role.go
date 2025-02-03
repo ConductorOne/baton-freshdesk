@@ -75,7 +75,7 @@ func (r *roleBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *
 	return rv, "", nil, nil
 }
 
-func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var rv []*v2.Grant
 	err := r.GetAgentsDetails(ctx)
 	if err != nil {
@@ -179,7 +179,7 @@ func newRoleBuilder(c *client.FreshdeskClient) *roleBuilder {
 }
 
 // This function parses a role from Freshdesk into a Role Resource
-func parseIntoRoleResource(ctx context.Context, role *client.Role, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+func parseIntoRoleResource(_ context.Context, role *client.Role, _ *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"id":          role.ID,
 		"name":        role.Name,

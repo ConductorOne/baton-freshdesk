@@ -22,7 +22,7 @@ type groupBuilder struct {
 	agentDetailMutex sync.RWMutex
 }
 
-func (g *groupBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
+func (g *groupBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return g.resourceType
 }
 
@@ -60,7 +60,7 @@ func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId
 	return rv, nextPageToken, annotation, nil
 }
 
-func (o *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (g *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var rv []*v2.Entitlement
 	const permissionName = "member"
 
@@ -75,7 +75,7 @@ func (o *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ 
 	return rv, "", nil, nil
 }
 
-func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var rv []*v2.Grant
 	err := g.GetAgentsDetails(ctx)
 	if err != nil {
@@ -109,7 +109,7 @@ func newGroupBuilder(c *client.FreshdeskClient) *groupBuilder {
 }
 
 // This function parses a group from Freshdesk into a Group Resource
-func parseIntoGroupResource(ctx context.Context, group *client.Group, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+func parseIntoGroupResource(_ context.Context, group *client.Group, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"group_id":   group.ID,
 		"group_name": group.Name,
