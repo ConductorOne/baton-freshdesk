@@ -3,7 +3,6 @@ package connector
 import (
 	"context"
 	"github.com/conductorone/baton-freshdesk/pkg/client"
-
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
@@ -40,7 +39,7 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 	for _, agent := range *agents {
 		agentCopy := agent
-		userResource, err := parseIntoUserResource(ctx, &agentCopy, nil)
+		userResource, err := parseIntoUserResource(&agentCopy, parentResourceID)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -56,7 +55,7 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 }
 
 // This function parses an Agent (users from Freshdesk) into a User Resource
-func parseIntoUserResource(ctx context.Context, agent *client.Agent, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	var userStatus v2.UserTrait_Status_Status = v2.UserTrait_Status_STATUS_ENABLED
 
 	profile := map[string]interface{}{
