@@ -90,7 +90,7 @@ func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pag
 			return nil, "", nil, err
 		}
 
-		if slices.Contains(agentDetail.GroupIDs, value) {
+		if slices.Contains(agentDetail.GroupIDs, int64(value)) {
 			userResource, _ := parseIntoUserResource(&agentDetail, nil)
 
 			membershipGrant := grant.NewGrant(resource, permissionName, userResource.Id)
@@ -98,6 +98,7 @@ func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pag
 		}
 
 	}
+
 	return rv, "", nil, nil
 }
 
@@ -183,7 +184,7 @@ func (g *groupBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.T
 		}
 
 		for _, agent := range *agents {
-			agentID := strconv.Itoa(agent.ID)
+			agentID := strconv.FormatInt(agent.ID, 10)
 
 			rv = append(rv, agentID)
 		}

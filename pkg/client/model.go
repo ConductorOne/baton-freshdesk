@@ -3,16 +3,16 @@ package client
 import "time"
 
 type Agent struct {
-	ID             int       `json:"id,omitempty"`
+	ID             int64     `json:"id,omitempty"`
 	Available      bool      `json:"available,omitempty"`
 	AvailableSince time.Time `json:"available_since,omitempty"`
 	Occasional     bool      `json:"occasional,omitempty"`
 	Signature      string    `json:"signature,omitempty"`
-	TicketScope    int       `json:"ticket_scope,omitempty"`
+	TicketScope    int64     `json:"ticket_scope,omitempty"`
 	Type           string    `json:"type,omitempty"`
-	SkillIDs       []int     `json:"skill_ids,omitempty"`
-	GroupIDs       []int     `json:"group_ids,omitempty"`
-	RoleIDs        []int     `json:"role_ids,omitempty"`
+	SkillIDs       []int64   `json:"skill_ids,omitempty"`
+	GroupIDs       []int64   `json:"group_ids,omitempty"`
+	RoleIDs        []int64   `json:"role_ids,omitempty"`
 	CreatedAt      time.Time `json:"created_at,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at,omitempty"`
 	Contact        Contact   `json:"contact,omitempty"`
@@ -34,7 +34,7 @@ type Contact struct {
 }
 
 type Role struct {
-	ID          int       `json:"id,omitempty"`
+	ID          int64     `json:"id,omitempty"`
 	Description string    `json:"description,omitempty"`
 	Name        string    `json:"name,omitempty"`
 	Default     bool      `json:"default,omitempty"`
@@ -43,12 +43,12 @@ type Role struct {
 }
 
 type Group struct {
-	ID               int       `json:"id,omitempty"`
+	ID               int64     `json:"id,omitempty"`
 	AgentIDs         []int64   `json:"agent_ids,omitempty"`
-	AutoTicketAssign int       `json:"auto_ticket_assign,omitempty"`
-	BusinessHourID   int       `json:"business_hour_id,omitempty"`
+	AutoTicketAssign int64     `json:"auto_ticket_assign,omitempty"`
+	BusinessHourID   int64     `json:"business_hour_id,omitempty"`
 	Description      string    `json:"description,omitempty"`
-	EscalateTo       int       `json:"escalate_to,omitempty"`
+	EscalateTo       int64     `json:"escalate_to,omitempty"`
 	Name             string    `json:"name,omitempty"`
 	UnassignedFor    string    `json:"unassigned_for,omitempty"`
 	CreatedAt        time.Time `json:"created_at,omitempty"`
