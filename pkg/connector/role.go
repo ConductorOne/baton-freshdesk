@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -10,6 +11,8 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 	"slices"
 	"strconv"
 	"sync"
@@ -22,7 +25,7 @@ type roleBuilder struct {
 	client            *client.FreshdeskClient
 }
 
-func (r *roleBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
+func (r *roleBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return r.resourceType
 }
 
@@ -86,11 +89,12 @@ func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagi
 		const permissionName = "assigned"
 
 		value, err := strconv.Atoi(resource.Id.Resource)
+
 		if err != nil {
 			return nil, "", nil, err
 		}
 
-		if slices.Contains(agentDetail.RoleIDs, value) {
+		if slices.Contains(agentDetail.RoleIDs, int64(value)) {
 			userResource, _ := parseIntoUserResource(&agentDetail, nil)
 
 			membershipGrant := grant.NewGrant(resource, permissionName, userResource.Id)
@@ -98,8 +102,38 @@ func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagi
 		}
 
 	}
-
 	return rv, "", nil, nil
+
+}
+
+func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+	if principal.Id.ResourceType != userResourceType.Id {
+		l.Warn("freshdesk-connector: only users can be granted with role membership",
+			zap.String("principal_id", principal.Id.Resource),
+			zap.String("principal_type", principal.Id.Resource))
+		return nil, fmt.Errorf("freshdesk-connector: only users can be granted with role membership")
+	}
+
+	userID := principal.Id.Resource
+	roleID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	agent, _, err := r.client.GetAgentDetail(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	agent.RoleIDs = append(agent.RoleIDs, roleID)
+
+	anno, err := r.client.UpdateAgent(ctx, agent)
+	if err != nil {
+		return nil, err
+	}
+
+	return anno, nil
 }
 
 func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.Token) ([]string, error) {
@@ -122,7 +156,7 @@ func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.To
 		}
 
 		for _, agent := range *agents {
-			agentID := strconv.Itoa(agent.ID)
+			agentID := strconv.FormatInt(agent.ID, 10)
 
 			rv = append(rv, agentID)
 		}

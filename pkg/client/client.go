@@ -8,10 +8,10 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/tomnomnom/linkheader"
-	"strings"
-
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 )
 
 // Endpoints available for Freshdesk APIs
@@ -258,4 +258,20 @@ func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) (*[]
 	}
 
 	return res, nextPage, annotation, nil
+}
+
+func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annotations.Annotations, error) {
+	agentID := strconv.FormatInt(agent.ID, 10)
+	queryUrl, err := url.JoinPath(f.freshdeskURL, updateAgent, agentID)
+	if err != nil {
+		return nil, err
+	}
+	body := agent.RoleIDs
+
+	_, anno, err := f.doRequest(ctx, http.MethodPut, queryUrl, nil, &body)
+	if err != nil {
+		return nil, err
+	}
+
+	return anno, nil
 }
