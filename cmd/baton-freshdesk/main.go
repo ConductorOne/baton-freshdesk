@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/conductorone/baton-freshdesk/pkg/client"
-	"os"
-
 	"github.com/conductorone/baton-freshdesk/pkg/connector"
 	"github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
@@ -14,6 +12,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"os"
 )
 
 var version = "dev"

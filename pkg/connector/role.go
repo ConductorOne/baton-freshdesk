@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
@@ -15,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -103,7 +103,6 @@ func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagi
 
 	}
 	return rv, "", nil, nil
-
 }
 
 func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
@@ -127,6 +126,34 @@ func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitle
 	}
 
 	agent.RoleIDs = append(agent.RoleIDs, roleID)
+
+	anno, err := r.client.UpdateAgent(ctx, agent)
+	if err != nil {
+		return nil, err
+	}
+
+	return anno, nil
+}
+
+func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	userID := grant.Principal.Id.Resource
+	roleID, err := ExtractRoleIDFromEntitlement(grant.Entitlement.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	agent, _, err := r.client.GetAgentDetail(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var assignedRoles []int64
+	for _, assignedRole := range agent.RoleIDs {
+		if assignedRole != roleID {
+			assignedRoles = append(assignedRoles, assignedRole)
+		}
+	}
+	agent.RoleIDs = assignedRoles
 
 	anno, err := r.client.UpdateAgent(ctx, agent)
 	if err != nil {
@@ -190,7 +217,7 @@ func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
 	}
 
 	if len(IDs) == 0 {
-		return errors.New("no agents found")
+		return fmt.Errorf("no agents found")
 	}
 
 	for _, id := range IDs {
@@ -230,4 +257,18 @@ func parseIntoRoleResource(_ context.Context, role *client.Role, _ *v2.ResourceI
 	}
 
 	return ret, nil
+}
+
+func ExtractRoleIDFromEntitlement(entitlementID string) (int64, error) {
+	segments := strings.Split(entitlementID, ":")
+	if len(segments) != 3 {
+		return 0, fmt.Errorf("baton-freshdesk: invalid entitlement ID %s", entitlementID)
+	}
+
+	roleID, err := strconv.ParseInt(segments[1], 10, 64)
+	if err != nil {
+		return 9, err
+	}
+
+	return roleID, nil
 }

@@ -217,7 +217,7 @@ func (f *FreshdeskClient) doRequest(
 		return nil, nil, err
 	}
 
-	// Access to the rate limit data ?
+	//TODO Access to the rate limit data ?
 
 	annotation := annotations.Annotations{}
 	//annotation.WithRateLimiting(/*extracted data from rate limit data goes here*/)
@@ -262,13 +262,16 @@ func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) (*[]
 
 func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annotations.Annotations, error) {
 	agentID := strconv.FormatInt(agent.ID, 10)
-	queryUrl, err := url.JoinPath(f.freshdeskURL, updateAgent, agentID)
+	queryUrl, err := url.JoinPath(f.freshdeskURL, updateAgent, "/", agentID)
 	if err != nil {
 		return nil, err
 	}
-	body := agent.RoleIDs
 
-	_, anno, err := f.doRequest(ctx, http.MethodPut, queryUrl, nil, &body)
+	body := map[string]interface{}{
+		"role_ids": agent.RoleIDs,
+	}
+
+	_, anno, err := f.doRequest(ctx, http.MethodPut, queryUrl, nil, body)
 	if err != nil {
 		return nil, err
 	}
