@@ -2,9 +2,26 @@
 
 # `baton-freshdesk` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-freshdesk.svg)](https://pkg.go.dev/github.com/conductorone/baton-freshdesk) ![main ci](https://github.com/conductorone/baton-freshdesk/actions/workflows/main.yaml/badge.svg)
 
-`baton-freshdesk` is a connector for built using the [Baton SDK](https://github.com/conductorone/baton-sdk).
+`baton-freshdesk` is a connector for Freshdesk built using the [Baton SDK](https://github.com/conductorone/baton-sdk). It communicates with the [Freshdesk API](https://developers.freshdesk.com/api/) to syncronize data from the platform and gather information about the Users. This connnector allows you to visualize the permits of each user (the roles they have) and to modify them by adding or removing roles.
 
 Check out [Baton](https://github.com/conductorone/baton) to learn more the project in general.
+
+
+# Prerequisites
+In order to use this connector, you need to have an API Key to access the Freshdesk domain. Both the Token and the Domain must be indicated with the flags --api-key and --domain.
+Example: 
+  For connecting to https://example.freshdesk.com you should do:
+  
+  ```
+  baton-freshdesk --api-key abcdefghij1234567890 --domain example
+  ```
+
+## Where can I find my API key?
+    1. Log in to your Support Portal
+    2. Click on your profile picture on the top right corner of your portal
+    3. Go to Profile settings Page
+    4. Your API key will be available below the change password section to your right
+
 
 # Getting Started
 
@@ -38,6 +55,8 @@ baton resources
 
 `baton-freshdesk` will pull down information about the following resources:
 - Users
+- Roles
+- Groups
 
 # Contributing, Support and Issues
 
