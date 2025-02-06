@@ -67,13 +67,20 @@ jobs:
       - name: Grant entitlement
         run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} --grant-entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --grant-principal="${{ env.CONNECTOR_PRINCIPAL }}" --grant-principal-type="${{ env.CONNECTOR_PRINCIPAL_TYPE }}"
 
+      - name: Re-sync the data from Freshdesk
+        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }}
+
       - name: Check grant was granted
         run:
-          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status ".grants[].principal.id.resource == \"${{ env.CONNECTOR_PRINCIPAL }}\""
+          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status '.grants[].principal.id.resource == \"${{ env.CONNECTOR_PRINCIPAL }}\"'
 
       - name: Revoke grants
         run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} --revoke-grant="${{ env.CONNECTOR_GRANT }}"
 
+
+      - name: Re-sync the data from Freshdesk
+        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }}
+
       - name: Check grant was revoked
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} && baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status "if .grants then .grants[]?.principal.id.resource != \"${{ env.CONNECTOR_PRINCIPAL }}\" else . end"
+        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} && baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status 'if .grants then .grants[]?.principal.id.resource != \"${{ env.CONNECTOR_PRINCIPAL }}\" else . end'
 
