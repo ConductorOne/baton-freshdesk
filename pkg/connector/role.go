@@ -3,6 +3,11 @@ package connector
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -12,10 +17,6 @@ import (
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
-	"slices"
-	"strconv"
-	"strings"
-	"sync"
 )
 
 type roleBuilder struct {
@@ -32,6 +33,9 @@ func (r *roleBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 func (r *roleBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var rv []*v2.Resource
 	bag, pageToken, err := getToken(pToken, roleResourceType)
+	if err != nil {
+		return nil, "", nil, err
+	}
 
 	roles, nextPageToken, annotation, err := r.client.ListRoles(ctx, client.PageOptions{
 		Page:    pageToken,
@@ -96,11 +100,9 @@ func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagi
 
 		if slices.Contains(agentDetail.RoleIDs, int64(value)) {
 			userResource, _ := parseIntoUserResource(&agentDetail, nil)
-
 			membershipGrant := grant.NewGrant(resource, permissionName, userResource.Id)
 			rv = append(rv, membershipGrant)
 		}
-
 	}
 	return rv, "", nil, nil
 }
@@ -168,6 +170,9 @@ func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.To
 
 	for {
 		bag, pageToken, err := getToken(pToken, userResourceType)
+		if err != nil {
+			return nil, err
+		}
 
 		agents, nextPageToken, _, err := r.client.ListAgents(ctx, client.PageOptions{
 			Page:    pageToken,
@@ -206,7 +211,7 @@ func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
 	r.agentDetailsMutex.Lock()
 	defer r.agentDetailsMutex.Unlock()
 
-	if r.agentsDetails != nil && len(r.agentsDetails) > 0 {
+	if r.agentsDetails != nil || len(r.agentsDetails) > 0 {
 		return nil
 	}
 

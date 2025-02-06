@@ -2,7 +2,11 @@ package connector
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+	"sync"
+
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -10,9 +14,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
-	"slices"
-	"strconv"
-	"sync"
 )
 
 type groupBuilder struct {
@@ -29,6 +30,9 @@ func (g *groupBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var rv []*v2.Resource
 	bag, pageToken, err := getToken(pToken, roleResourceType)
+	if err != nil {
+		return nil, "", nil, err
+	}
 
 	groups, nextPageToken, annotation, err := g.client.ListGroups(ctx, client.PageOptions{
 		Page:    pageToken,
@@ -96,9 +100,7 @@ func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pag
 			membershipGrant := grant.NewGrant(resource, permissionName, userResource.Id)
 			rv = append(rv, membershipGrant)
 		}
-
 	}
-
 	return rv, "", nil, nil
 }
 
@@ -109,7 +111,7 @@ func newGroupBuilder(c *client.FreshdeskClient) *groupBuilder {
 	}
 }
 
-// This function parses a group from Freshdesk into a Group Resource
+// This function parses a group from Freshdesk into a Group Resource.
 func parseIntoGroupResource(_ context.Context, group *client.Group, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"group_id":   group.ID,
@@ -138,18 +140,18 @@ func (g *groupBuilder) GetAgentsDetails(ctx context.Context) error {
 	g.agentDetailMutex.Lock()
 	defer g.agentDetailMutex.Unlock()
 
-	if g.agentsDetails != nil && len(g.agentsDetails) > 0 {
+	if g.agentsDetails != nil || len(g.agentsDetails) > 0 {
 		return nil
 	}
 
-	paginationToken := pagination.Token{50, ""}
+	paginationToken := pagination.Token{Size: 50, Token: ""}
 	IDs, err := g.GetAllAgentsIDs(ctx, &paginationToken)
 	if err != nil {
 		return err
 	}
 
 	if len(IDs) == 0 {
-		return errors.New("no agents found")
+		return fmt.Errorf("no agents found")
 	}
 
 	for _, id := range IDs {
@@ -169,6 +171,9 @@ func (g *groupBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.T
 
 	for {
 		bag, pageToken, err := getToken(pToken, userResourceType)
+		if err != nil {
+			return nil, err
+		}
 
 		agents, nextPageToken, _, err := g.client.ListAgents(ctx, client.PageOptions{
 			Page:    pageToken,

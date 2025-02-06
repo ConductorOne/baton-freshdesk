@@ -4,28 +4,29 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/uhttp"
-	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
-	"github.com/tomnomnom/linkheader"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/uhttp"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"github.com/tomnomnom/linkheader"
 )
 
-// Endpoints available for Freshdesk APIs
+// Endpoints available for Freshdesk APIs.
 const (
 	baseURL = "https://.freshdesk.com"
 
-	// GET
+	// GET endpoints.
 	allAgents = "/api/v2/agents"
 	allGrous  = "/api/v2/groups"
 	allRoles  = "/api/v2/roles"
 
 	getAgentDetail = "/api/v2/agents" // Must indicate the agent ID: /[id].
 
-	// PUT
+	// PUT endpoints.
 	updateAgent = "/api/v2/agents" // Must indicate the agent ID: /[id].
 )
 

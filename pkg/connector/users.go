@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -24,6 +25,9 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	var rv []*v2.Resource
 
 	bag, pageToken, err := getToken(pToken, userResourceType)
+	if err != nil {
+		return nil, "", nil, err
+	}
 
 	agents, nextPageToken, annotation, err := u.client.ListAgents(ctx, client.PageOptions{
 		Page:    pageToken,
@@ -57,7 +61,7 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 // parseIntoUserResource - This function parses an Agent (users from Freshdesk) into a User Resource.
 func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
-	var userStatus v2.UserTrait_Status_Status = v2.UserTrait_Status_STATUS_ENABLED
+	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 
 	profile := map[string]interface{}{
 		"user_id":    agent.ID,
