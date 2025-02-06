@@ -55,7 +55,7 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	return rv, nextPageToken, annotation, nil
 }
 
-// This function parses an Agent (users from Freshdesk) into a User Resource
+// parseIntoUserResource - This function parses an Agent (users from Freshdesk) into a User Resource.
 func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	var userStatus v2.UserTrait_Status_Status = v2.UserTrait_Status_STATUS_ENABLED
 

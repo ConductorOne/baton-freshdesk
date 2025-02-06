@@ -6,8 +6,10 @@ import (
 )
 
 // By default, the number of objects returned per page is 30.
-// The maximum number of objects that can be retrieved per page is 100
-// https://api.freshservice.com/v2/#pagination
+// It can be adjusted by adding the 'per_page' parameter in the query string.
+// The maximum number of objects that can be retrieved per page is 100.
+// https://developers.freshdesk.com/api/ - Pagination section under Getting Started
+
 const ItemsPerPage = 100
 
 // PageOptions is options for list method of paginatable resources.
@@ -19,7 +21,7 @@ type PageOptions struct {
 
 type ReqOpt func(reqURL *url.URL)
 
-// Number of items to return.
+// WithPageLimit : Number of items to return.
 func WithPageLimit(pageLimit int) ReqOpt {
 	if pageLimit <= 0 || pageLimit > ItemsPerPage {
 		pageLimit = ItemsPerPage
@@ -27,7 +29,7 @@ func WithPageLimit(pageLimit int) ReqOpt {
 	return WithQueryParam("per_page", strconv.Itoa(pageLimit))
 }
 
-// Number for the page (inclusive). The page number starts with 1.
+// WithPage : Number for the page (inclusive). The page number starts with 1.
 // If page is 0, first page is assumed.
 func WithPage(page int) ReqOpt {
 	if page == 0 {

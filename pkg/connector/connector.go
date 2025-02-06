@@ -38,7 +38,7 @@ func (d *Connector) Metadata(_ context.Context) (*v2.ConnectorMetadata, error) {
 }
 
 // Validate is called to ensure that the connector is properly configured. It should exercise any API credentials
-// to be sure that they are valid. //TODO Apply validations
+// to be sure that they are valid. // TODO Apply validations.
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
 	return nil, nil
 }

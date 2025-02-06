@@ -23,10 +23,10 @@ const (
 	allGrous  = "/api/v2/groups"
 	allRoles  = "/api/v2/roles"
 
-	getAgentDetail = "/api/v2/agents" // /[id]
+	getAgentDetail = "/api/v2/agents" // Must indicate the agent ID: /[id].
 
 	// PUT
-	updateAgent = "/api/v2/agents" // /[id]
+	updateAgent = "/api/v2/agents" // Must indicate the agent ID: /[id].
 )
 
 type FreshdeskClient struct {
@@ -104,7 +104,7 @@ func isValidUrl(urlBase string) bool {
 	return err == nil && u.Scheme != "" && u.Host != ""
 }
 
-// ListAgents Gets all the Agents from Freshdesk and deserialized them into an Array of Agents
+// ListAgents Gets all the Agents from Freshdesk and deserialized them into an Array of Agents.
 func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]Agent, string, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, allAgents)
 	if err != nil {
@@ -120,7 +120,7 @@ func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]
 	return res, nextPage, annotation, nil
 }
 
-// GetAgentDetail Gets all the Agents from Freshdesk and deserialized them into an Array of Agents
+// GetAgentDetail Gets all the Agents from Freshdesk and deserialized them into an Array of Agents.
 func (f *FreshdeskClient) GetAgentDetail(ctx context.Context, agentID string) (*Agent, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, getAgentDetail, agentID)
 	if err != nil {
@@ -135,7 +135,7 @@ func (f *FreshdeskClient) GetAgentDetail(ctx context.Context, agentID string) (*
 	return res, annotation, nil
 }
 
-// getListFromAPI sends a request to the Freshdesk API to receive a JSON with a list of entities
+// getListFromAPI sends a request to the Freshdesk API to receive a JSON with a list of entities.
 func (f *FreshdeskClient) getListFromAPI(
 	ctx context.Context,
 	urlAddress string,
@@ -217,10 +217,7 @@ func (f *FreshdeskClient) doRequest(
 		return nil, nil, err
 	}
 
-	//TODO Access to the rate limit data ?
-
 	annotation := annotations.Annotations{}
-	//annotation.WithRateLimiting(/*extracted data from rate limit data goes here*/)
 
 	return resp.Header, annotation, nil
 }

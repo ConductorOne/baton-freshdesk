@@ -210,7 +210,7 @@ func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
 		return nil
 	}
 
-	paginationToken := pagination.Token{50, ""}
+	paginationToken := pagination.Token{Size: 50, Token: ""}
 	IDs, err := r.GetAllAgentsIDs(ctx, &paginationToken)
 	if err != nil {
 		return err
@@ -239,7 +239,7 @@ func newRoleBuilder(c *client.FreshdeskClient) *roleBuilder {
 	}
 }
 
-// This function parses a role from Freshdesk into a Role Resource
+// This function parses a role from Freshdesk into a Role Resource.
 func parseIntoRoleResource(_ context.Context, role *client.Role, _ *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"id":          role.ID,
@@ -267,7 +267,7 @@ func ExtractRoleIDFromEntitlement(entitlementID string) (int64, error) {
 
 	roleID, err := strconv.ParseInt(segments[1], 10, 64)
 	if err != nil {
-		return 9, err
+		return 0, err
 	}
 
 	return roleID, nil
