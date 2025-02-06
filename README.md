@@ -8,7 +8,7 @@ Check out [Baton](https://github.com/conductorone/baton) to learn more the proje
 
 
 # Prerequisites
-In order to use this connector, you need to have an API Key to access the Freshdesk domain. Both the Token and the Domain must be indicated with the flags --api-key and --domain.
+In order to use this connector, you need to have an API Key to access the Freshdesk domain. Both the Token and the Domain must be indicated with the flags `--api-key` and `--domain`.
 Example: 
   For connecting to https://example.freshdesk.com you should do:
   
@@ -16,12 +16,12 @@ Example:
   baton-freshdesk --api-key abcdefghij1234567890 --domain example
   ```
 
-## Where can I find my API key?
+## Where can I find my API Key?
     1. Log in to your Support Portal
     2. Click on your profile picture on the top right corner of your portal
     3. Go to Profile settings Page
-    4. Your API key will be available below the change password section to your right
-
+    4. Your API Key will be available below the change password section to your right
+NOTE: The ability to access data depends on the permissions available for the user owner of the API Key
 
 # Getting Started
 
