@@ -21,6 +21,10 @@ jobs:
         go-version: [1.22.x]
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
+    env:
+      FRESHDESK_TOKEN: ${{ secrets.FRESHDESK_TOKEN }}
+      FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
+
     steps:
       - name: Install Go
         if: success()
@@ -37,7 +41,7 @@ jobs:
         with:
           test-results: test.json
 
-  test:
+  freshdesk-tests:
     runs-on: ubuntu-latest
     env:
       BATON_LOG_LEVEL: debug
