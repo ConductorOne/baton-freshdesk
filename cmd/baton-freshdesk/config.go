@@ -5,11 +5,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	apiKey = "api-key"
+	domain = "domain"
+)
+
 var (
+	apiKeyField = field.StringField(apiKey, field.WithRequired(true), field.WithDescription("Freshdesk account api key"))
+	domainField = field.StringField(domain, field.WithRequired(true), field.WithDescription("Freshdesk account domain"))
+
 	// ConfigurationFields defines the external configuration required for the
 	// connector to run. Note: these fields can be marked as optional or
 	// required.
-	ConfigurationFields = []field.SchemaField{}
+	ConfigurationFields = []field.SchemaField{apiKeyField, domainField}
 
 	// FieldRelationships defines relationships between the fields listed in
 	// ConfigurationFields that can be automatically validated. For example, a
