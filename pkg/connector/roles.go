@@ -165,18 +165,19 @@ func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 	return anno, nil
 }
 
-func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.Token) ([]string, error) {
+func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context) ([]string, error) {
 	var rv []string
+	paginationToken := pagination.Token{Size: 50, Token: ""}
 
 	for {
-		bag, pageToken, err := getToken(pToken, userResourceType)
+		bag, pageToken, err := getToken(&paginationToken, userResourceType)
 		if err != nil {
 			return nil, err
 		}
 
 		agents, nextPageToken, _, err := r.client.ListAgents(ctx, client.PageOptions{
 			Page:    pageToken,
-			PerPage: pToken.Size,
+			PerPage: paginationToken.Size,
 		})
 		if err != nil {
 			return nil, err
@@ -187,7 +188,7 @@ func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.To
 			return nil, err
 		}
 
-		for _, agent := range *agents {
+		for _, agent := range agents {
 			agentID := strconv.FormatInt(agent.ID, 10)
 
 			rv = append(rv, agentID)
@@ -201,7 +202,7 @@ func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context, pToken *pagination.To
 		if nextPageToken == "" {
 			break
 		}
-		pToken.Token = nextPageToken
+		paginationToken.Token = nextPageToken
 	}
 
 	return rv, nil
@@ -215,8 +216,7 @@ func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
 		return nil
 	}
 
-	paginationToken := pagination.Token{Size: 50, Token: ""}
-	IDs, err := r.GetAllAgentsIDs(ctx, &paginationToken)
+	IDs, err := r.GetAllAgentsIDs(ctx)
 	if err != nil {
 		return err
 	}
