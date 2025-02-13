@@ -49,9 +49,9 @@ jobs:
       BATON_FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
 
       # The following parameters are passed to grant/revoke commands
-      CONNECTOR_GRANT: 'role:156001705590:assigned:user:156004161664'
-      CONNECTOR_ENTITLEMENT: 'role:156001705590:assigned'
-      CONNECTOR_PRINCIPAL: '156004161664'
+      CONNECTOR_GRANT: 'role:157001880212:assigned:user:157004641859'
+      CONNECTOR_ENTITLEMENT: 'role:157001880212:assigned'
+      CONNECTOR_PRINCIPAL: '157004641859'
       CONNECTOR_PRINCIPAL_TYPE: 'user'
     steps:
       - name: Install Go
