@@ -49,10 +49,10 @@ jobs:
       BATON_FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
 
       # The following parameters are passed to grant/revoke commands
-      CONNECTOR_GRANT: 'role:156001705590:assigned:user:156004161664'
-      CONNECTOR_ENTITLEMENT: 'role:156001705590:assigned'
-      CONNECTOR_PRINCIPAL: '156004161664'
-      CONNECTOR_PRINCIPAL_TYPE: 'user'
+      CONNECTOR_GRANT: ${{ vars.CONNECTOR_GRANT }}
+      CONNECTOR_ENTITLEMENT: ${{ vars.CONNECTOR_ENTITLEMENT }}
+      CONNECTOR_PRINCIPAL: ${{ vars.CONNECTOR_PRINCIPAL }}
+      CONNECTOR_PRINCIPAL_TYPE: ${{ vars.CONNECTOR_PRINCIPAL_TYPE }}
     steps:
       - name: Install Go
         uses: actions/setup-go@v5
@@ -76,7 +76,7 @@ jobs:
 
       - name: Check grant was granted
         run:
-          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status '.grants[].principal.id.resource == "${{ env.CONNECTOR_PRINCIPAL }}"'
+          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status '.grants[].principal.id.resource == "${{ env.CONNECTOR_PRINCIPAL }}"' | grep true
 
       - name: Revoke grants
         run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} --revoke-grant="${{ env.CONNECTOR_GRANT }}"

@@ -42,7 +42,7 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		return nil, "", nil, err
 	}
 
-	for _, agent := range *agents {
+	for _, agent := range agents {
 		agentCopy := agent
 		userResource, err := parseIntoUserResource(&agentCopy, parentResourceID)
 		if err != nil {

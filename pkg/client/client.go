@@ -37,11 +37,19 @@ type FreshdeskClient struct {
 	token        string
 }
 
-func New(ctx context.Context, freshdeskClient *FreshdeskClient) (*FreshdeskClient, error) {
-	var (
-		clientToken  = freshdeskClient.getToken()
-		clientDomain = freshdeskClient.GetDomain()
-	)
+type Option func(client *FreshdeskClient)
+
+func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
+	freshdeskClient := &FreshdeskClient{
+		httpClient:   &uhttp.BaseHttpClient{},
+		freshdeskURL: baseURL,
+		domain:       "",
+		token:        "",
+	}
+
+	for _, o := range opts {
+		o(freshdeskClient)
+	}
 
 	httpClient, err := uhttp.NewClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
 	if err != nil {
@@ -63,33 +71,22 @@ func New(ctx context.Context, freshdeskClient *FreshdeskClient) (*FreshdeskClien
 		return nil, fmt.Errorf("the URL: %s is not valid", fdURL)
 	}
 
-	fdClient := FreshdeskClient{
-		httpClient:   cli,
-		freshdeskURL: fdURL,
-		domain:       clientDomain,
-		token:        clientToken,
-	}
+	freshdeskClient.freshdeskURL = fdURL
+	freshdeskClient.httpClient = cli
 
-	return &fdClient, nil
+	return freshdeskClient, nil
 }
 
-func NewClient() *FreshdeskClient {
-	return &FreshdeskClient{
-		httpClient:   &uhttp.BaseHttpClient{},
-		freshdeskURL: baseURL,
-		domain:       "",
-		token:        "",
+func WithBearerToken(apiToken string) Option {
+	return func(c *FreshdeskClient) {
+		c.token = apiToken
 	}
 }
 
-func (f *FreshdeskClient) WithBearerToken(apiToken string) *FreshdeskClient {
-	f.token = apiToken
-	return f
-}
-
-func (f *FreshdeskClient) WithDomain(domain string) *FreshdeskClient {
-	f.domain = domain
-	return f
+func WithDomain(domain string) Option {
+	return func(c *FreshdeskClient) {
+		c.domain = domain
+	}
 }
 
 func (f *FreshdeskClient) getToken() string {
@@ -106,13 +103,13 @@ func isValidUrl(urlBase string) bool {
 }
 
 // ListAgents Gets all the Agents from Freshdesk and deserialized them into an Array of Agents.
-func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) (*[]Agent, string, annotations.Annotations, error) {
+func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) ([]Agent, string, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, allAgents)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res *[]Agent
+	var res []Agent
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err

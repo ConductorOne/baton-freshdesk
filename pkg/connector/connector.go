@@ -45,13 +45,15 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, apiKey, domain string, freshdeskClient *client.FreshdeskClient) (*Connector, error) {
-	var err error
-	if apiKey != "" && domain != "" {
-		freshdeskClient, err = client.New(ctx, freshdeskClient)
-		if err != nil {
-			return nil, err
-		}
+func New(ctx context.Context, domain, apiKey string) (*Connector, error) {
+	freshdeskClient, err := client.New(
+		ctx,
+		client.WithDomain(domain),
+		client.WithBearerToken(apiKey),
+	)
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &Connector{

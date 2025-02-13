@@ -25,10 +25,17 @@ func TestUserBuilderList(t *testing.T) {
 		message := fmt.Sprintf("params not found. apikey: %s - domain: %s", apikey, domain)
 		t.Skip(message)
 	}
-	fc := client.NewClient().WithBearerToken(apikey).WithDomain(domain)
-	c, _ := client.New(ctx, fc)
-	u := newUserBuilder(c)
 
+	c, err := client.New(
+		ctx,
+		client.WithDomain(domain),
+		client.WithBearerToken(apikey),
+	)
+	if err != nil {
+		t.Errorf("ERROR: Failed to create client: %v", err)
+	}
+
+	u := newUserBuilder(c)
 	res, _, _, err := u.List(ctx, parentResourceID, pToken)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
@@ -43,8 +50,11 @@ func TestRoleBuilderList(t *testing.T) {
 		t.Skip(message)
 	}
 
-	fc := client.NewClient().WithBearerToken(apikey).WithDomain(domain)
-	c, err := client.New(ctx, fc)
+	c, err := client.New(
+		ctx,
+		client.WithDomain(domain),
+		client.WithBearerToken(apikey),
+	)
 	if err != nil {
 		t.Errorf("ERROR: Failed to create client: %v", err)
 	}
@@ -65,8 +75,11 @@ func TestGroupBuilderList(t *testing.T) {
 		t.Skip(message)
 	}
 
-	fc := client.NewClient().WithBearerToken(apikey).WithDomain(domain)
-	c, err := client.New(ctx, fc)
+	c, err := client.New(
+		ctx,
+		client.WithDomain(domain),
+		client.WithBearerToken(apikey),
+	)
 	if err != nil {
 		t.Errorf("ERROR: Failed to create client: %v", err)
 	}

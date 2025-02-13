@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/conductorone/baton-freshdesk/pkg/client"
 	"github.com/conductorone/baton-freshdesk/pkg/connector"
 	"github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
@@ -44,29 +43,23 @@ func main() {
 }
 
 func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, error) {
-	fdClient := client.NewClient()
-
 	// Get params from Viper
 	fdApiKey := v.GetString(apiKey)
 	fdDomain := v.GetString(domain)
 
 	l := ctxzap.Extract(ctx)
 
-	fdClient = fdClient.WithBearerToken(fdApiKey).WithDomain(fdDomain)
-
 	if err := ValidateConfig(v); err != nil {
 		return nil, err
 	}
 
-	cb, err := connector.New(ctx, fdApiKey, fdDomain, fdClient)
+	cb, err := connector.New(ctx, fdDomain, fdApiKey)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err
 	}
 
-	opts := make([]connectorbuilder.Opt, 0)
-
-	c, err := connectorbuilder.NewConnector(ctx, cb, opts...)
+	c, err := connectorbuilder.NewConnector(ctx, cb)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err
