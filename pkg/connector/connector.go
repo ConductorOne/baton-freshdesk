@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/conductorone/baton-freshdesk/pkg/client"
+	cfg "github.com/conductorone/baton-freshdesk/pkg/config"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -45,11 +46,11 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, domain, apiKey string) (*Connector, error) {
+func New(ctx context.Context, cfg *cfg.Freshdesk) (*Connector, error) {
 	freshdeskClient, err := client.New(
 		ctx,
-		client.WithDomain(domain),
-		client.WithBearerToken(apiKey),
+		client.WithDomain(cfg.Domain),
+		client.WithBearerToken(cfg.ApiKey),
 	)
 
 	if err != nil {
