@@ -27,12 +27,13 @@ var (
 	ConfigurationFields = []field.SchemaField{apiKeyField, domainField}
 
 	FieldRelationships = []field.SchemaFieldRelationship{}
+)
 
-	Configuration = field.NewConfiguration(
-		ConfigurationFields,
-		field.WithConstraints(FieldRelationships...),
-		field.WithConnectorDisplayName("Freshdesk"),
-		field.WithHelpUrl("/docs/baton/freshdesk"),
-		field.WithIconUrl("/static/app-icons/freshdesk.svg"),
-	)
+//go:generate go run ./gen
+var Configuration = field.NewConfiguration(
+	ConfigurationFields,
+	field.WithConstraints(FieldRelationships...),
+	field.WithConnectorDisplayName("Freshdesk"),
+	field.WithHelpUrl("/docs/baton/freshdesk"),
+	field.WithIconUrl("/static/app-icons/freshdesk.svg"),
 )
