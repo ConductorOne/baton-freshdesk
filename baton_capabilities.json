@@ -3,15 +3,15 @@
   "resourceTypeCapabilities":  [
     {
       "resourceType":  {
-        "id":  "user",
-        "displayName":  "User",
+        "id":  "group",
+        "displayName":  "Group",
         "traits":  [
-          "TRAIT_USER"
-        ]
+          "TRAIT_GROUP"
+        ],
+        "description":  "The Agents can be organized into different groups. It's useful for the organization of users."
       },
       "capabilities":  [
-        "CAPABILITY_SYNC",
-        "CAPABILITY_PROVISION"
+        "CAPABILITY_SYNC"
       ]
     },
     {
@@ -20,17 +20,31 @@
         "displayName":  "Role",
         "traits":  [
           "TRAIT_ROLE"
-        ]
+        ],
+        "description":  "The Roles allow you to create special privileges and specify what an agent can see and do within your Freshdesk support portal"
       },
       "capabilities":  [
         "CAPABILITY_SYNC",
         "CAPABILITY_PROVISION"
       ]
+    },
+    {
+      "resourceType":  {
+        "id":  "user",
+        "displayName":  "User",
+        "traits":  [
+          "TRAIT_USER"
+        ],
+        "description":  "The Agents are the users for Freshdesk"
+      },
+      "capabilities":  [
+        "CAPABILITY_SYNC"
+      ]
     }
   ],
   "connectorCapabilities":  [
-    "CAPABILITY_SYNC",
-    "CAPABILITY_PROVISION"
+    "CAPABILITY_PROVISION",
+    "CAPABILITY_SYNC"
   ],
   "credentialDetails":  {}
 }
