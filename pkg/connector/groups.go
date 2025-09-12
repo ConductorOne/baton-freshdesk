@@ -52,9 +52,8 @@ func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId
 		return nil, "", nil, err
 	}
 
-	for _, group := range *groups {
-		groupCopy := group
-		userResource, err := parseIntoGroupResource(ctx, &groupCopy, parentResourceID)
+	for _, group := range groups {
+		userResource, err := parseIntoGroupResource(ctx, group, parentResourceID)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -144,10 +143,6 @@ func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitl
 			uniqueAgentIDs = append(uniqueAgentIDs, entry)
 		}
 	}
-
-	if uniqueAgentIDs == nil {
-		uniqueAgentIDs = []int64{}
-	}
 	payload := client.UpdateGroupPayload{
 		AgentIDs: uniqueAgentIDs,
 	}
@@ -192,9 +187,6 @@ func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations
 		}
 	}
 
-	if agentIDs == nil {
-		agentIDs = []int64{}
-	}
 	payload := client.UpdateGroupPayload{
 		AgentIDs: agentIDs,
 	}

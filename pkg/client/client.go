@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/ratelimit"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/tomnomnom/linkheader"
@@ -98,13 +100,13 @@ func isValidUrl(urlBase string) bool {
 }
 
 // ListAgents Gets all the Agents from Freshdesk and deserialized them into an Array of Agents.
-func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) ([]Agent, string, annotations.Annotations, error) {
+func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) ([]*Agent, string, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, agentsEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res []Agent
+	var res []*Agent
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
@@ -228,6 +230,25 @@ func (f *FreshdeskClient) doRequest(
 
 	annotation := annotations.Annotations{}
 
+	if resp != nil {
+		if rlDesc, _ := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); rlDesc != nil {
+			annotation.WithRateLimiting(rlDesc)
+		}
+	}
+
+	if resp != nil && resp.StatusCode >= 400 {
+		var fdErr freshdeskAPIError
+		_ = json.NewDecoder(resp.Body).Decode(&fdErr)
+		if fdErr.Description != "" {
+			if len(fdErr.Errors) > 0 {
+				e := fdErr.Errors[0]
+				return nil, annotation, fmt.Errorf("freshdesk error (%d): %s - field='%s' code='%s' msg='%s'", resp.StatusCode, fdErr.Description, e.Field, e.Code, e.Message)
+			}
+			return nil, annotation, fmt.Errorf("freshdesk error (%d): %s", resp.StatusCode, fdErr.Description)
+		}
+		return nil, annotation, fmt.Errorf("freshdesk http error: status %d", resp.StatusCode)
+	}
+
 	return resp.Header, annotation, nil
 }
 
@@ -236,13 +257,13 @@ func basicAuth(username, password string) string {
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) (*[]Role, string, annotations.Annotations, error) {
+func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) ([]*Role, string, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, rolesEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res *[]Role
+	var res []*Role
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
@@ -251,13 +272,13 @@ func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) (*[]R
 	return res, nextPage, annotation, nil
 }
 
-func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) (*[]Group, string, annotations.Annotations, error) {
+func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) ([]*Group, string, annotations.Annotations, error) {
 	queryUrl, err := url.JoinPath(f.freshdeskURL, groupsEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res *[]Group
+	var res []*Group
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
@@ -330,4 +351,14 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	}
 
 	return anno, nil
+}
+
+// define error struct.
+type freshdeskAPIError struct {
+	Description string `json:"description"`
+	Errors      []struct {
+		Field   string `json:"field"`
+		Message string `json:"message"`
+		Code    string `json:"code"`
+	} `json:"errors"`
 }

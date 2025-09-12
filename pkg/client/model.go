@@ -63,10 +63,6 @@ type CreateAgentPayload struct {
 	Name        string `json:"name,omitempty"`
 }
 
-type UpdateAgentPayload struct {
-	RoleIDs []int64 `json:"role_ids,omitempty"`
-}
-
 type UpdateGroupPayload struct {
 	AgentIDs []int64 `json:"agent_ids"`
 }
