@@ -131,20 +131,14 @@ func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitl
 		return nil, status.Errorf(codes.Internal, "failed to get group details: %v", err)
 	}
 
-	agentIDs := make([]int64, 0, len(group.AgentIDs)+1)
-	agentIDs = append(agentIDs, group.AgentIDs...)
-	agentIDs = append(agentIDs, agentID)
-
-	keys := make(map[int64]bool)
-	uniqueAgentIDs := []int64{}
-	for _, entry := range agentIDs {
-		if _, value := keys[entry]; !value {
-			keys[entry] = true
-			uniqueAgentIDs = append(uniqueAgentIDs, entry)
-		}
+	if slices.Contains(group.AgentIDs, agentID) {
+		return annotations.New(&v2.GrantAlreadyExists{}), nil
 	}
+
+	group.AgentIDs = append(group.AgentIDs, agentID)
+
 	payload := client.UpdateGroupPayload{
-		AgentIDs: uniqueAgentIDs,
+		AgentIDs: group.AgentIDs,
 	}
 	_, annos, err := g.client.UpdateGroup(ctx, groupID, payload)
 	if err != nil {
@@ -178,6 +172,10 @@ func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations
 	group, _, err := g.client.GetGroup(ctx, groupID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get group details: %v", err)
+	}
+
+	if !slices.Contains(group.AgentIDs, agentID) {
+		return annotations.New(&v2.GrantAlreadyRevoked{}), nil
 	}
 
 	var agentIDs []int64

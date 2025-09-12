@@ -3,15 +3,14 @@ package client
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/ratelimit"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/tomnomnom/linkheader"
@@ -186,6 +185,7 @@ func (f *FreshdeskClient) doRequest(
 		resp *http.Response
 		err  error
 	)
+	rlDesc := &v2.RateLimitDescription{}
 	urlAddress, err := url.Parse(endpointUrl)
 	if err != nil {
 		return nil, nil, err
@@ -207,46 +207,26 @@ func (f *FreshdeskClient) doRequest(
 		return nil, nil, err
 	}
 
-	switch method {
-	case http.MethodGet, http.MethodPut, http.MethodPost:
-		doOptions := []uhttp.DoOption{}
-		if res != nil {
-			doOptions = append(doOptions, uhttp.WithResponse(&res))
-		}
-		resp, err = f.httpClient.Do(req, doOptions...)
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-	case http.MethodDelete:
-		resp, err = f.httpClient.Do(req)
-		if resp != nil {
-			defer resp.Body.Close()
-		}
+	var fdErr freshdeskAPIError
+
+	doOptions := []uhttp.DoOption{
+		uhttp.WithRatelimitData(rlDesc),
+		uhttp.WithErrorResponse(&fdErr),
+	}
+	if (method == http.MethodGet || method == http.MethodPut || method == http.MethodPost) && res != nil {
+		doOptions = append(doOptions, uhttp.WithResponse(&res))
 	}
 
-	if err != nil {
-		return nil, nil, err
+	resp, err = f.httpClient.Do(req, doOptions...)
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 
 	annotation := annotations.Annotations{}
+	annotation.WithRateLimiting(rlDesc)
 
-	if resp != nil {
-		if rlDesc, _ := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); rlDesc != nil {
-			annotation.WithRateLimiting(rlDesc)
-		}
-	}
-
-	if resp != nil && resp.StatusCode >= 400 {
-		var fdErr freshdeskAPIError
-		_ = json.NewDecoder(resp.Body).Decode(&fdErr)
-		if fdErr.Description != "" {
-			if len(fdErr.Errors) > 0 {
-				e := fdErr.Errors[0]
-				return nil, annotation, fmt.Errorf("freshdesk error (%d): %s - field='%s' code='%s' msg='%s'", resp.StatusCode, fdErr.Description, e.Field, e.Code, e.Message)
-			}
-			return nil, annotation, fmt.Errorf("freshdesk error (%d): %s", resp.StatusCode, fdErr.Description)
-		}
-		return nil, annotation, fmt.Errorf("freshdesk http error: status %d", resp.StatusCode)
+	if err != nil {
+		return nil, annotation, err
 	}
 
 	return resp.Header, annotation, nil
@@ -361,4 +341,8 @@ type freshdeskAPIError struct {
 		Message string `json:"message"`
 		Code    string `json:"code"`
 	} `json:"errors"`
+}
+
+func (e freshdeskAPIError) Message() string {
+	return e.Description
 }
