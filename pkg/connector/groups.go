@@ -14,6 +14,11 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"go.uber.org/zap"
 )
 
 type groupBuilder struct {
@@ -47,9 +52,8 @@ func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId
 		return nil, "", nil, err
 	}
 
-	for _, group := range *groups {
-		groupCopy := group
-		userResource, err := parseIntoGroupResource(ctx, &groupCopy, parentResourceID)
+	for _, group := range groups {
+		userResource, err := parseIntoGroupResource(ctx, group, parentResourceID)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -102,6 +106,94 @@ func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pag
 		}
 	}
 	return rv, "", nil, nil
+}
+
+func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	if principal.Id.ResourceType != userResourceType.Id {
+		l.Warn(
+			"baton-freshdesk: only users can be granted group membership",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, status.Error(codes.InvalidArgument, "baton-freshdesk: only users can be granted group membership")
+	}
+
+	agentID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse agent ID: %v", err)
+	}
+	groupID := entitlement.Resource.Id.Resource
+
+	group, _, err := g.client.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get group details: %v", err)
+	}
+
+	if slices.Contains(group.AgentIDs, agentID) {
+		return annotations.New(&v2.GrantAlreadyExists{}), nil
+	}
+
+	group.AgentIDs = append(group.AgentIDs, agentID)
+
+	payload := client.UpdateGroupPayload{
+		AgentIDs: group.AgentIDs,
+	}
+	_, annos, err := g.client.UpdateGroup(ctx, groupID, payload)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update group members: %v", err)
+	}
+
+	return annos, nil
+}
+
+func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	entitlement := grant.Entitlement
+	principal := grant.Principal
+
+	if principal.Id.ResourceType != userResourceType.Id {
+		l.Warn(
+			"baton-freshdesk: only users can have group membership revoked",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, status.Error(codes.InvalidArgument, "baton-freshdesk: only users can have group membership revoked")
+	}
+
+	agentID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse agent ID: %v", err)
+	}
+	groupID := entitlement.Resource.Id.Resource
+
+	group, _, err := g.client.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get group details: %v", err)
+	}
+
+	if !slices.Contains(group.AgentIDs, agentID) {
+		return annotations.New(&v2.GrantAlreadyRevoked{}), nil
+	}
+
+	var agentIDs []int64
+	for _, id := range group.AgentIDs {
+		if id != agentID {
+			agentIDs = append(agentIDs, id)
+		}
+	}
+
+	payload := client.UpdateGroupPayload{
+		AgentIDs: agentIDs,
+	}
+	_, annos, err := g.client.UpdateGroup(ctx, groupID, payload)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update group members: %v", err)
+	}
+
+	return annos, nil
 }
 
 func newGroupBuilder(c *client.FreshdeskClient) *groupBuilder {

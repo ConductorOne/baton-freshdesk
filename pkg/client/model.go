@@ -54,3 +54,15 @@ type Group struct {
 	CreatedAt        time.Time `json:"created_at,omitempty"`
 	UpdatedAt        time.Time `json:"updated_at,omitempty"`
 }
+
+type CreateAgentPayload struct {
+	Email       string `json:"email"`
+	Occasional  bool   `json:"occasional,omitempty"`
+	TicketScope int    `json:"ticket_scope"`
+	Language    string `json:"language,omitempty"`
+	Name        string `json:"name,omitempty"`
+}
+
+type UpdateGroupPayload struct {
+	AgentIDs []int64 `json:"agent_ids"`
+}

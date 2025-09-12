@@ -6,6 +6,7 @@ import (
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 )
@@ -43,8 +44,7 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	}
 
 	for _, agent := range agents {
-		agentCopy := agent
-		userResource, err := parseIntoUserResource(&agentCopy, parentResourceID)
+		userResource, err := parseIntoUserResource(agent, parentResourceID)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -106,6 +106,105 @@ func (u *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ *paginat
 // Grants always returns an empty slice for users since they don't have any entitlements.
 func (u *userBuilder) Grants(_ context.Context, _ *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	return nil, "", nil, nil
+}
+
+// CreateAccountCapabilityDetails returns the account provisioning capabilities of this connector.
+// In this case, only account creation without password is supported.
+func (u *userBuilder) CreateAccountCapabilityDetails(
+	_ context.Context,
+) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
+	return &v2.CredentialDetailsAccountProvisioning{
+		SupportedCredentialOptions: []v2.CapabilityDetailCredentialOption{
+			v2.CapabilityDetailCredentialOption_CAPABILITY_DETAIL_CREDENTIAL_OPTION_NO_PASSWORD,
+		},
+		PreferredCredentialOption: v2.CapabilityDetailCredentialOption_CAPABILITY_DETAIL_CREDENTIAL_OPTION_NO_PASSWORD,
+	}, nil, nil
+}
+
+func (o *userBuilder) CreateAccount(
+	ctx context.Context,
+	accountInfo *v2.AccountInfo,
+	credentialOptions *v2.CredentialOptions,
+) (
+	connectorbuilder.CreateAccountResponse,
+	[]*v2.PlaintextData,
+	annotations.Annotations,
+	error,
+) {
+	// Extract fields from the profile
+	profile := accountInfo.GetProfile().AsMap()
+
+	var (
+		email       string
+		occasional  bool
+		ticketScope int
+		language    string
+		name        string
+	)
+
+	if v, ok := profile["email"].(string); ok {
+		email = v
+	}
+
+	if v, ok := profile["occasional"].(bool); ok {
+		occasional = v
+	}
+
+	if v, ok := profile["ticketScope"]; ok {
+		switch t := v.(type) {
+		case int:
+			ticketScope = t
+		case float64:
+			ticketScope = int(t)
+		}
+	}
+
+	if v, ok := profile["language"].(string); ok {
+		language = v
+	}
+
+	if v, ok := profile["name"].(string); ok {
+		name = v
+	}
+
+	payload := client.CreateAgentPayload{
+		Email:       email,
+		TicketScope: ticketScope,
+	}
+
+	if language != "" {
+		payload.Language = language
+	}
+	if name != "" {
+		payload.Name = name
+	}
+	if _, ok := profile["occasional"].(bool); ok {
+		payload.Occasional = occasional
+	}
+
+	// Create a new user in Freshdesk
+	agent, annotation, err := o.client.CreateAgent(ctx, payload)
+	if err != nil {
+		return nil, nil, annotation, err
+	}
+
+	userResource, err := parseIntoUserResource(agent, nil)
+	if err != nil {
+		return nil, nil, annotation, err
+	}
+
+	resp := &v2.CreateAccountResponse_SuccessResult{Resource: userResource, IsCreateAccountResult: true}
+
+	return resp, nil, annotation, nil
+}
+
+func (u *userBuilder) Delete(ctx context.Context, resourceId *v2.ResourceId) (annotations.Annotations, error) {
+	profile, err := u.client.DeleteAgent(ctx, resourceId.Resource)
+	if err != nil {
+		return nil, err
+	}
+
+	return profile, nil
 }
 
 func newUserBuilder(c *client.FreshdeskClient) *userBuilder {

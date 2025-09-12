@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
@@ -16,18 +17,13 @@ import (
 )
 
 // Endpoints available for Freshdesk APIs.
+// https://developers.freshdesk.com/api/#intro .
 const (
 	baseURL = "https://.freshdesk.com"
 
-	// GET endpoints.
-	allAgents = "/api/v2/agents"
-	allGrous  = "/api/v2/groups"
-	allRoles  = "/api/v2/roles"
-
-	getAgentDetail = "/api/v2/agents" // Must indicate the agent ID: /[id].
-
-	// PUT endpoints.
-	updateAgent = "/api/v2/agents" // Must indicate the agent ID: /[id].
+	agentsEndpoint = "/api/v2/agents"
+	groupsEndpoint = "/api/v2/groups"
+	rolesEndpoint  = "/api/v2/roles"
 )
 
 type FreshdeskClient struct {
@@ -103,13 +99,13 @@ func isValidUrl(urlBase string) bool {
 }
 
 // ListAgents Gets all the Agents from Freshdesk and deserialized them into an Array of Agents.
-func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) ([]Agent, string, annotations.Annotations, error) {
-	queryUrl, err := url.JoinPath(f.freshdeskURL, allAgents)
+func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) ([]*Agent, string, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, agentsEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res []Agent
+	var res []*Agent
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
@@ -120,7 +116,7 @@ func (f *FreshdeskClient) ListAgents(ctx context.Context, opts PageOptions) ([]A
 
 // GetAgentDetail Gets all the Agents from Freshdesk and deserialized them into an Array of Agents.
 func (f *FreshdeskClient) GetAgentDetail(ctx context.Context, agentID string) (*Agent, annotations.Annotations, error) {
-	queryUrl, err := url.JoinPath(f.freshdeskURL, getAgentDetail, agentID)
+	queryUrl, err := url.JoinPath(f.freshdeskURL, agentsEndpoint, agentID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -131,6 +127,22 @@ func (f *FreshdeskClient) GetAgentDetail(ctx context.Context, agentID string) (*
 	}
 
 	return res, annotation, nil
+}
+
+// CreateAgent creates a new agent in Freshdesk.
+func (f *FreshdeskClient) CreateAgent(ctx context.Context, payload CreateAgentPayload) (*Agent, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, agentsEndpoint)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var res Agent
+	_, annotation, err := f.doRequest(ctx, http.MethodPost, queryUrl, &res, payload)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &res, annotation, nil
 }
 
 // getListFromAPI sends a request to the Freshdesk API to receive a JSON with a list of entities.
@@ -173,6 +185,7 @@ func (f *FreshdeskClient) doRequest(
 		resp *http.Response
 		err  error
 	)
+	rlDesc := &v2.RateLimitDescription{}
 	urlAddress, err := url.Parse(endpointUrl)
 	if err != nil {
 		return nil, nil, err
@@ -194,28 +207,27 @@ func (f *FreshdeskClient) doRequest(
 		return nil, nil, err
 	}
 
-	switch method {
-	case http.MethodGet, http.MethodPut, http.MethodPost:
-		doOptions := []uhttp.DoOption{}
-		if res != nil {
-			doOptions = append(doOptions, uhttp.WithResponse(&res))
-		}
-		resp, err = f.httpClient.Do(req, doOptions...)
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-	case http.MethodDelete:
-		resp, err = f.httpClient.Do(req)
-		if resp != nil {
-			defer resp.Body.Close()
-		}
+	var fdErr freshdeskAPIError
+
+	doOptions := []uhttp.DoOption{
+		uhttp.WithRatelimitData(rlDesc),
+		uhttp.WithErrorResponse(&fdErr),
+	}
+	if (method == http.MethodGet || method == http.MethodPut || method == http.MethodPost) && res != nil {
+		doOptions = append(doOptions, uhttp.WithResponse(&res))
 	}
 
-	if err != nil {
-		return nil, nil, err
+	resp, err = f.httpClient.Do(req, doOptions...)
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 
 	annotation := annotations.Annotations{}
+	annotation.WithRateLimiting(rlDesc)
+
+	if err != nil {
+		return nil, annotation, err
+	}
 
 	return resp.Header, annotation, nil
 }
@@ -225,13 +237,13 @@ func basicAuth(username, password string) string {
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) (*[]Role, string, annotations.Annotations, error) {
-	queryUrl, err := url.JoinPath(f.freshdeskURL, allRoles)
+func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) ([]*Role, string, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, rolesEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res *[]Role
+	var res []*Role
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
@@ -240,24 +252,71 @@ func (f *FreshdeskClient) ListRoles(ctx context.Context, opts PageOptions) (*[]R
 	return res, nextPage, annotation, nil
 }
 
-func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) (*[]Group, string, annotations.Annotations, error) {
-	queryUrl, err := url.JoinPath(f.freshdeskURL, allGrous)
+func (f *FreshdeskClient) ListGroups(ctx context.Context, opts PageOptions) ([]*Group, string, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, groupsEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	var res *[]Group
+	var res []*Group
 	nextPage, annotation, err := f.getListFromAPI(ctx, queryUrl, &res, WithPage(opts.Page), WithPageLimit(opts.PerPage))
 	if err != nil {
 		return nil, "", nil, err
 	}
 
 	return res, nextPage, annotation, nil
+}
+
+// UpdateGroup updates a group in Freshdesk.
+func (f *FreshdeskClient) UpdateGroup(ctx context.Context, groupID string, payload UpdateGroupPayload) (*Group, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, groupsEndpoint, groupID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var res Group
+	_, annotation, err := f.doRequest(ctx, http.MethodPut, queryUrl, &res, payload)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &res, annotation, nil
+}
+
+// DeleteAgent soft deletes an agent in Freshdesk.
+func (f *FreshdeskClient) DeleteAgent(ctx context.Context, agentID string) (annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, agentsEndpoint, agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, annotation, err := f.doRequest(ctx, http.MethodDelete, queryUrl, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return annotation, nil
+}
+
+// GetGroup gets a group from Freshdesk.
+func (f *FreshdeskClient) GetGroup(ctx context.Context, groupID string) (*Group, annotations.Annotations, error) {
+	queryUrl, err := url.JoinPath(f.freshdeskURL, groupsEndpoint, groupID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var res Group
+	_, annotation, err := f.doRequest(ctx, http.MethodGet, queryUrl, &res, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &res, annotation, nil
 }
 
 func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annotations.Annotations, error) {
 	agentID := strconv.FormatInt(agent.ID, 10)
-	queryUrl, err := url.JoinPath(f.freshdeskURL, updateAgent, "/", agentID)
+	queryUrl, err := url.JoinPath(f.freshdeskURL, agentsEndpoint, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -272,4 +331,18 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	}
 
 	return anno, nil
+}
+
+// define error struct.
+type freshdeskAPIError struct {
+	Description string `json:"description"`
+	Errors      []struct {
+		Field   string `json:"field"`
+		Message string `json:"message"`
+		Code    string `json:"code"`
+	} `json:"errors"`
+}
+
+func (e freshdeskAPIError) Message() string {
+	return e.Description
 }
