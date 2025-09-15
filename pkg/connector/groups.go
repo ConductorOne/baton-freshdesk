@@ -178,7 +178,7 @@ func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations
 		return annotations.New(&v2.GrantAlreadyRevoked{}), nil
 	}
 
-	var agentIDs []int64
+	agentIDs := make([]int64, 0, len(group.AgentIDs))
 	for _, id := range group.AgentIDs {
 		if id != agentID {
 			agentIDs = append(agentIDs, id)
