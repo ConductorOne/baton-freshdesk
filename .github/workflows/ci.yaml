@@ -4,12 +4,12 @@ jobs:
   go-lint:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.22.x
-      - name: Checkout code
-        uses: actions/checkout@v4
+          go-version-file: go.mod
       - name: Run linters
         uses: golangci/golangci-lint-action@v8
         with:
@@ -18,21 +18,17 @@ jobs:
   go-test:
     strategy:
       matrix:
-        go-version: [1.22.x]
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
-    env:
-      FRESHDESK_TOKEN: ${{ secrets.FRESHDESK_TOKEN }}
-      FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
 
     steps:
-      - name: Install Go
+      - name: Checkout code
         if: success()
+        uses: actions/checkout@v4
+      - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-      - name: Checkout code
-        uses: actions/checkout@v4
+          go-version-file: go.mod
       - name: go tests
         run: (set -o pipefail && go test -v -covermode=count -json ./... | tee test.json)
       - name: annotate go tests
@@ -45,46 +41,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BATON_LOG_LEVEL: debug
-      BATON_FRESHDESK_TOKEN: ${{ secrets.FRESHDESK_TOKEN }}
-      BATON_FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
-
-      # The following parameters are passed to grant/revoke commands
-      CONNECTOR_GRANT: ${{ vars.CONNECTOR_GRANT }}
-      CONNECTOR_ENTITLEMENT: ${{ vars.CONNECTOR_ENTITLEMENT }}
-      CONNECTOR_PRINCIPAL: ${{ vars.CONNECTOR_PRINCIPAL }}
-      CONNECTOR_PRINCIPAL_TYPE: ${{ vars.CONNECTOR_PRINCIPAL_TYPE }}
+      BATON_API_KEY: ${{ secrets.FRESHDESK_TOKEN }}
+      BATON_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.22.x
-      - name: Checkout code
-        uses: actions/checkout@v4
+          go-version-file: go.mod
       - name: Build baton-freshdesk
         run: go build ./cmd/baton-freshdesk
-      - name: Run baton-freshdesk
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }}
-
-      - name: Install baton
-        run: ./scripts/get-baton.sh && mv baton /usr/local/bin
-
-      - name: Grant entitlement
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} --grant-entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --grant-principal="${{ env.CONNECTOR_PRINCIPAL }}" --grant-principal-type="${{ env.CONNECTOR_PRINCIPAL_TYPE }}"
-
-      - name: Re-sync the data from Freshdesk
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }}
-
-      - name: Check grant was granted
-        run:
-          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status '.grants[].principal.id.resource == "${{ env.CONNECTOR_PRINCIPAL }}"' | grep true
-
-      - name: Revoke grants
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} --revoke-grant="${{ env.CONNECTOR_GRANT }}"
-
-
-      - name: Re-sync the data from Freshdesk
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }}
-
-      - name: Check grant was revoked
-        run: ./baton-freshdesk --api-key=${{ env.BATON_FRESHDESK_TOKEN }} --domain=${{ env.BATON_FRESHDESK_DOMAIN }} && baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | jq --exit-status 'if .grants then .grants[]?.principal.id.resource != "${{ env.CONNECTOR_PRINCIPAL }}" else . end'
-
+      - name: Test sync
+        uses: ConductorOne/github-workflows/actions/sync-test@v2
+        with:
+          connector: ./baton-freshdesk
+          baton-entitlement: ${{ vars.CONNECTOR_ENTITLEMENT }}
+          baton-principal: ${{ vars.CONNECTOR_PRINCIPAL }}
+          baton-principal-type: ${{ vars.CONNECTOR_PRINCIPAL_TYPE }}

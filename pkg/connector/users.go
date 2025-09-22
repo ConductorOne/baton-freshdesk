@@ -16,6 +16,8 @@ type userBuilder struct {
 	client       *client.FreshdeskClient
 }
 
+var _ connectorbuilder.AccountManager = &userBuilder{}
+
 func (u *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
@@ -124,7 +126,7 @@ func (u *userBuilder) CreateAccountCapabilityDetails(
 func (o *userBuilder) CreateAccount(
 	ctx context.Context,
 	accountInfo *v2.AccountInfo,
-	credentialOptions *v2.CredentialOptions,
+	credentialOptions *v2.LocalCredentialOptions,
 ) (
 	connectorbuilder.CreateAccountResponse,
 	[]*v2.PlaintextData,
