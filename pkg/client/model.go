@@ -57,7 +57,7 @@ type Group struct {
 
 type CreateAgentPayload struct {
 	Email       string `json:"email"`
-	Occasional  bool   `json:"occasional,omitempty"`
+	Occasional  bool   `json:"occasional"`
 	TicketScope int    `json:"ticket_scope"`
 	Language    string `json:"language,omitempty"`
 	Name        string `json:"name,omitempty"`

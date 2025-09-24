@@ -172,6 +172,7 @@ func (o *userBuilder) CreateAccount(
 	payload := client.CreateAgentPayload{
 		Email:       email,
 		TicketScope: ticketScope,
+		Occasional:  occasional,
 	}
 
 	if language != "" {
@@ -179,9 +180,6 @@ func (o *userBuilder) CreateAccount(
 	}
 	if name != "" {
 		payload.Name = name
-	}
-	if _, ok := profile["occasional"].(bool); ok {
-		payload.Occasional = occasional
 	}
 
 	// Create a new user in Freshdesk
