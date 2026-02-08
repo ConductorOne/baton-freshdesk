@@ -97,12 +97,15 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 
 // New returns a new instance of the connector.
 func New(ctx context.Context, cfg *cfg.Freshdesk, opts *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
-	freshdeskClient, err := client.New(
-		ctx,
+	clientOpts := []client.Option{
 		client.WithDomain(cfg.Domain),
 		client.WithBearerToken(cfg.ApiKey),
-	)
+	}
+	if cfg.BaseUrl != "" {
+		clientOpts = append(clientOpts, client.WithBaseURL(cfg.BaseUrl))
+	}
 
+	freshdeskClient, err := client.New(ctx, clientOpts...)
 	if err != nil {
 		return nil, nil, err
 	}

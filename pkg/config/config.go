@@ -5,8 +5,9 @@ import (
 )
 
 const (
-	apiKey = "api-key"
-	domain = "domain"
+	apiKey  = "api-key"
+	domain  = "domain"
+	baseURL = "base-url"
 )
 
 var (
@@ -23,8 +24,15 @@ var (
 		field.WithRequired(true),
 		field.WithDescription("Freshdesk account domain"),
 	)
+	BaseURLField = field.StringField(
+		baseURL,
+		field.WithDisplayName("Base URL"),
+		field.WithDescription("Override the Freshdesk API URL (for testing)"),
+		field.WithHidden(true),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
+	)
 
-	ConfigurationFields = []field.SchemaField{apiKeyField, domainField}
+	ConfigurationFields = []field.SchemaField{apiKeyField, domainField, BaseURLField}
 
 	FieldRelationships = []field.SchemaFieldRelationship{}
 )

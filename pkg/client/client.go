@@ -56,13 +56,22 @@ func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
 		return nil, err
 	}
 
-	fdURL := fmt.Sprintf(freshdeskBaseURL, freshdeskClient.domain)
-	if !isValidUrl(fdURL) {
-		return nil, fmt.Errorf("the URL: %s is not valid", fdURL)
-	}
-
-	freshdeskClient.freshdeskURL = fdURL
 	freshdeskClient.httpClient = cli
+
+	// If a custom base URL was provided, use it directly; otherwise construct from domain
+	if freshdeskClient.freshdeskURL == "" {
+		fdURL := fmt.Sprintf(freshdeskBaseURL, freshdeskClient.domain)
+		if !isValidUrl(fdURL) {
+			return nil, fmt.Errorf("the URL: %s is not valid", fdURL)
+		}
+
+		freshdeskClient.freshdeskURL = fdURL
+	} else {
+		// Custom base URL provided - validate it
+		if !isValidUrl(freshdeskClient.freshdeskURL) {
+			return nil, fmt.Errorf("the URL: %s is not valid", freshdeskClient.freshdeskURL)
+		}
+	}
 
 	return freshdeskClient, nil
 }
@@ -76,6 +85,12 @@ func WithBearerToken(apiToken string) Option {
 func WithDomain(domain string) Option {
 	return func(c *FreshdeskClient) {
 		c.domain = domain
+	}
+}
+
+func WithBaseURL(baseURL string) Option {
+	return func(c *FreshdeskClient) {
+		c.freshdeskURL = baseURL
 	}
 }
 
