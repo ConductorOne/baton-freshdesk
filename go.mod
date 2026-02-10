@@ -10,6 +10,11 @@ require (
 )
 
 require (
+	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
+	github.com/quasilyte/go-ruleguard/dsl v0.3.23
+)
+
+require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/aws/aws-lambda-go v1.47.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.71.0 // indirect
