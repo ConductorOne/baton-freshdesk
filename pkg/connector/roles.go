@@ -156,7 +156,7 @@ func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 	}
 
 	if len(remainingRoles) == 0 {
-		return nil, fmt.Errorf("users must have at least one role. Cannot revoke the last remaining role")
+		return nil, fmt.Errorf("freshdesk users must have at least one role. Cannot revoke the last remaining role")
 	}
 
 	agent.RoleIDs = remainingRoles
