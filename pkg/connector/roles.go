@@ -148,13 +148,18 @@ func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 		return nil, err
 	}
 
-	var assignedRoles []int64
+	var remainingRoles []int64
 	for _, assignedRole := range agent.RoleIDs {
 		if assignedRole != roleID {
-			assignedRoles = append(assignedRoles, assignedRole)
+			remainingRoles = append(remainingRoles, assignedRole)
 		}
 	}
-	agent.RoleIDs = assignedRoles
+
+	if len(remainingRoles) == 0 {
+		return nil, fmt.Errorf("users must have at least one role. Cannot revoke the last remaining role")
+	}
+
+	agent.RoleIDs = remainingRoles
 
 	anno, err := r.client.UpdateAgent(ctx, agent)
 	if err != nil {
