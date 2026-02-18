@@ -14,6 +14,7 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 	"github.com/tomnomnom/linkheader"
 )
 
@@ -336,7 +337,7 @@ func (f *FreshdeskClient) GetAllAgentDetails(ctx context.Context, ss sessions.Se
 	if ss != nil {
 		agents, err := session.GetAllJSON[*Agent](ctx, ss, agentDetailsNamespace)
 		if err != nil {
-			return nil, fmt.Errorf("freshdesk-connector: failed to get cached agents: %w", err)
+			ctxzap.Extract(ctx).Debug("freshdesk-connector: failed to get cached agents, fetching from API", zap.Error(err))
 		}
 		if len(agents) > 0 {
 			return agents, nil
