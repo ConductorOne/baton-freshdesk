@@ -371,7 +371,7 @@ func (f *FreshdeskClient) GetAllAgentDetails(ctx context.Context, ss sessions.Se
 
 	if ss != nil && len(result) > 0 {
 		if err := session.SetManyJSON(ctx, ss, result, agentDetailsNamespace); err != nil {
-			return nil, fmt.Errorf("freshdesk-connector: failed to cache agents: %w", err)
+			ctxzap.Extract(ctx).Debug("freshdesk-connector: failed to cache agents", zap.Error(err))
 		}
 	}
 
