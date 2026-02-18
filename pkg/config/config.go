@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	apiKey = "api-key" //nolint:gosec // Not a credential
+	apiKey = "api-key"
 	domain = "domain"
 )
 
