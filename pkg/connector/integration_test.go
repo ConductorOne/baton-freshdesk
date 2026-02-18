@@ -9,6 +9,7 @@ import (
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +18,10 @@ var (
 	domain, _        = os.LookupEnv("FRESHDESK_DOMAIN")
 	apikey, _        = os.LookupEnv("FRESHDESK_TOKEN")
 	parentResourceID = &v2.ResourceId{}
-	pToken           = &pagination.Token{Size: 50, Token: ""}
+	attrs            = rs.SyncOpAttrs{
+		Session:   nil,
+		PageToken: pagination.Token{Size: 50, Token: ""},
+	}
 )
 
 func TestUserBuilderList(t *testing.T) {
@@ -36,7 +40,7 @@ func TestUserBuilderList(t *testing.T) {
 	}
 
 	u := newUserBuilder(c)
-	res, _, _, err := u.List(ctx, parentResourceID, pToken)
+	res, _, err := u.List(ctx, parentResourceID, attrs)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 
@@ -61,7 +65,7 @@ func TestRoleBuilderList(t *testing.T) {
 
 	r := newRoleBuilder(c)
 
-	res, _, _, err := r.List(ctx, parentResourceID, pToken)
+	res, _, err := r.List(ctx, parentResourceID, attrs)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 
@@ -85,7 +89,7 @@ func TestGroupBuilderList(t *testing.T) {
 	}
 
 	g := newGroupBuilder(c)
-	res, _, _, err := g.List(ctx, parentResourceID, pToken)
+	res, _, err := g.List(ctx, parentResourceID, attrs)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 

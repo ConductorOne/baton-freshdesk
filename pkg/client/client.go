@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/session"
+	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/tomnomnom/linkheader"
@@ -19,12 +20,14 @@ import (
 // Endpoints available for Freshdesk APIs.
 // https://developers.freshdesk.com/api/#intro .
 const (
-	baseURL = "https://.freshdesk.com"
+	freshdeskBaseURL = "https://%s.freshdesk.com"
 
 	agentsEndpoint = "/api/v2/agents"
 	groupsEndpoint = "/api/v2/groups"
 	rolesEndpoint  = "/api/v2/roles"
 )
+
+var agentDetailsNamespace = sessions.WithPrefix("agent_detail")
 
 type FreshdeskClient struct {
 	httpClient   *uhttp.BaseHttpClient
@@ -38,7 +41,7 @@ type Option func(client *FreshdeskClient)
 func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
 	freshdeskClient := &FreshdeskClient{
 		httpClient:   &uhttp.BaseHttpClient{},
-		freshdeskURL: baseURL,
+		freshdeskURL: "",
 		domain:       "",
 		token:        "",
 	}
@@ -57,12 +60,7 @@ func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
 		return nil, err
 	}
 
-	dotIndex := strings.Index(baseURL, ".")
-	if dotIndex == -1 {
-		return nil, fmt.Errorf("invalid URL: %s", baseURL)
-	}
-
-	fdURL := baseURL[:dotIndex] + freshdeskClient.domain + baseURL[dotIndex:]
+	fdURL := fmt.Sprintf(freshdeskBaseURL, freshdeskClient.domain)
 	if !isValidUrl(fdURL) {
 		return nil, fmt.Errorf("the URL: %s is not valid", fdURL)
 	}
@@ -331,6 +329,52 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	}
 
 	return anno, nil
+}
+
+// GetAllAgentDetails retrieves all agent details from session store, or falls back to paginating the API.
+func (f *FreshdeskClient) GetAllAgentDetails(ctx context.Context, ss sessions.SessionStore) (map[string]*Agent, error) {
+	if ss != nil {
+		agents, err := session.GetAllJSON[*Agent](ctx, ss, agentDetailsNamespace)
+		if err != nil {
+			return nil, fmt.Errorf("freshdesk-connector: failed to get cached agents: %w", err)
+		}
+		if len(agents) > 0 {
+			return agents, nil
+		}
+	}
+
+	result := make(map[string]*Agent)
+	page := 0
+	for {
+		agents, nextPage, _, err := f.ListAgents(ctx, PageOptions{Page: page, PerPage: ItemsPerPage})
+		if err != nil {
+			return nil, fmt.Errorf("freshdesk-connector: failed to list agents: %w", err)
+		}
+		for _, a := range agents {
+			agentID := strconv.FormatInt(a.ID, 10)
+			detail, _, err := f.GetAgentDetail(ctx, agentID)
+			if err != nil {
+				return nil, fmt.Errorf("freshdesk-connector: failed to fetch agent %s: %w", agentID, err)
+			}
+			result[agentID] = detail
+		}
+		if nextPage == "" {
+			break
+		}
+		nextPageInt, err := strconv.Atoi(nextPage)
+		if err != nil {
+			return nil, fmt.Errorf("freshdesk-connector: failed to parse next page token: %w", err)
+		}
+		page = nextPageInt
+	}
+
+	if ss != nil && len(result) > 0 {
+		if err := session.SetManyJSON(ctx, ss, result, agentDetailsNamespace); err != nil {
+			return nil, fmt.Errorf("freshdesk-connector: failed to cache agents: %w", err)
+		}
+	}
+
+	return result, nil
 }
 
 // define error struct.

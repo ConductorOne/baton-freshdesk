@@ -29,8 +29,8 @@ jobs:
 
       - name: Run and save capabilities output
         env:
-          BATON_DOMAIN: acme
-          BATON_API_KEY: 1234567890
+          BATON_FRESHDESK_DOMAIN: acme
+          BATON_FRESHDESK_API_KEY: 1234567890
         run: ./connector capabilities > baton_capabilities.json
 
       - name: Commit changes

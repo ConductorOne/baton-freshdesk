@@ -6,12 +6,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
@@ -20,53 +18,54 @@ import (
 )
 
 type roleBuilder struct {
-	resourceType      *v2.ResourceType
-	agentsDetails     []client.Agent
-	agentDetailsMutex sync.RWMutex
-	client            *client.FreshdeskClient
+	resourceType *v2.ResourceType
+	client       *client.FreshdeskClient
 }
 
 func (r *roleBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return r.resourceType
 }
 
-func (r *roleBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (r *roleBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, attrs rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	var rv []*v2.Resource
-	bag, pageToken, err := getToken(pToken, roleResourceType)
+	bag, pageToken, err := getToken(&attrs.PageToken, roleResourceType)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	roles, nextPageToken, annotation, err := r.client.ListRoles(ctx, client.PageOptions{
 		Page:    pageToken,
-		PerPage: pToken.Size,
+		PerPage: attrs.PageToken.Size,
 	})
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	err = bag.Next(nextPageToken)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	for _, role := range roles {
 		roleResource, err := parseIntoRoleResource(ctx, role, parentResourceID)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 		rv = append(rv, roleResource)
 	}
 
 	nextPageToken, err = bag.Marshal()
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
-	return rv, nextPageToken, annotation, nil
+	return rv, &rs.SyncOpResults{
+		NextPageToken: nextPageToken,
+		Annotations:   annotation,
+	}, nil
 }
 
-func (r *roleBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (r *roleBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	var rv []*v2.Entitlement
 	permissionName := "assigned"
 
@@ -78,32 +77,38 @@ func (r *roleBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *
 
 	rv = append(rv, entitlement.NewPermissionEntitlement(resource, permissionName, assigmentOptions...))
 
-	return rv, "", nil, nil
+	return rv, &rs.SyncOpResults{}, nil
 }
 
-func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, attrs rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	var rv []*v2.Grant
-	err := r.GetAgentsDetails(ctx)
+
+	agentDetailsMap, err := r.client.GetAllAgentDetails(ctx, attrs.Session)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, fmt.Errorf("freshdesk-connector: failed to get agent details: %w", err)
 	}
 
-	for _, agentDetail := range r.agentsDetails {
-		const permissionName = "assigned"
+	if len(agentDetailsMap) == 0 {
+		return nil, &rs.SyncOpResults{}, nil
+	}
 
-		value, err := strconv.Atoi(resource.Id.Resource)
+	roleIDInt, err := strconv.Atoi(resource.Id.Resource)
+	if err != nil {
+		return nil, nil, fmt.Errorf("freshdesk-connector: failed to parse role ID: %w", err)
+	}
 
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		if slices.Contains(agentDetail.RoleIDs, int64(value)) {
-			userResource, _ := parseIntoUserResource(&agentDetail, nil)
-			membershipGrant := grant.NewGrant(resource, permissionName, userResource.Id)
+	for _, agentDetail := range agentDetailsMap {
+		if slices.Contains(agentDetail.RoleIDs, int64(roleIDInt)) {
+			userResource, err := parseIntoUserResource(agentDetail, nil)
+			if err != nil {
+				return nil, nil, fmt.Errorf("freshdesk-connector: failed to create user resource: %w", err)
+			}
+			membershipGrant := grant.NewGrant(resource, "assigned", userResource.Id)
 			rv = append(rv, membershipGrant)
 		}
 	}
-	return rv, "", nil, nil
+
+	return rv, &rs.SyncOpResults{}, nil
 }
 
 func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
@@ -111,7 +116,7 @@ func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitle
 	if principal.Id.ResourceType != userResourceType.Id {
 		l.Warn("freshdesk-connector: only users can be granted with role membership",
 			zap.String("principal_id", principal.Id.Resource),
-			zap.String("principal_type", principal.Id.Resource))
+			zap.String("principal_type", principal.Id.ResourceType))
 		return nil, fmt.Errorf("freshdesk-connector: only users can be granted with role membership")
 	}
 
@@ -124,6 +129,10 @@ func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitle
 	agent, _, err := r.client.GetAgentDetail(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	if slices.Contains(agent.RoleIDs, roleID) {
+		return annotations.New(&v2.GrantAlreadyExists{}), nil
 	}
 
 	agent.RoleIDs = append(agent.RoleIDs, roleID)
@@ -140,12 +149,16 @@ func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 	userID := grant.Principal.Id.Resource
 	roleID, err := ExtractRoleIDFromEntitlement(grant.Entitlement.Id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("freshdesk-connector: failed to parse role ID from entitlement: %w", err)
 	}
 
 	agent, _, err := r.client.GetAgentDetail(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("freshdesk-connector: failed to get agent: %w", err)
+	}
+
+	if !slices.Contains(agent.RoleIDs, roleID) {
+		return annotations.New(&v2.GrantAlreadyRevoked{}), nil
 	}
 
 	var remainingRoles []int64
@@ -156,90 +169,19 @@ func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 	}
 
 	if len(remainingRoles) == 0 {
-		return nil, fmt.Errorf("freshdesk users must have at least one role. Cannot revoke the last remaining role")
+		return nil, fmt.Errorf("freshdesk-connector: cannot revoke last remaining role from agent")
 	}
 
 	agent.RoleIDs = remainingRoles
 
 	anno, err := r.client.UpdateAgent(ctx, agent)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("freshdesk-connector: failed to update agent roles: %w", err)
 	}
 
 	return anno, nil
 }
 
-func (r *roleBuilder) GetAllAgentsIDs(ctx context.Context) ([]string, error) {
-	var rv []string
-	paginationToken := pagination.Token{Size: 50, Token: ""}
-
-	for {
-		bag, pageToken, err := getToken(&paginationToken, userResourceType)
-		if err != nil {
-			return nil, err
-		}
-
-		agents, nextPageToken, _, err := r.client.ListAgents(ctx, client.PageOptions{
-			Page:    pageToken,
-			PerPage: paginationToken.Size,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		err = bag.Next(nextPageToken)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, agent := range agents {
-			agentID := strconv.FormatInt(agent.ID, 10)
-
-			rv = append(rv, agentID)
-		}
-
-		nextPageToken, err = bag.Marshal()
-		if err != nil {
-			return nil, err
-		}
-
-		if nextPageToken == "" {
-			break
-		}
-		paginationToken.Token = nextPageToken
-	}
-
-	return rv, nil
-}
-
-func (r *roleBuilder) GetAgentsDetails(ctx context.Context) error {
-	r.agentDetailsMutex.Lock()
-	defer r.agentDetailsMutex.Unlock()
-
-	if r.agentsDetails != nil || len(r.agentsDetails) > 0 {
-		return nil
-	}
-
-	IDs, err := r.GetAllAgentsIDs(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(IDs) == 0 {
-		return fmt.Errorf("no agents found")
-	}
-
-	for _, id := range IDs {
-		agentDetail, _, err := r.client.GetAgentDetail(ctx, id)
-		if err != nil {
-			return err
-		}
-
-		r.agentsDetails = append(r.agentsDetails, *agentDetail)
-	}
-
-	return nil
-}
 
 func newRoleBuilder(c *client.FreshdeskClient) *roleBuilder {
 	return &roleBuilder{

@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"sync"
 
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
@@ -22,53 +20,54 @@ import (
 )
 
 type groupBuilder struct {
-	resourceType     *v2.ResourceType
-	client           *client.FreshdeskClient
-	agentsDetails    []client.Agent
-	agentDetailMutex sync.RWMutex
+	resourceType *v2.ResourceType
+	client       *client.FreshdeskClient
 }
 
 func (g *groupBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return g.resourceType
 }
 
-func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (g *groupBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, attrs rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	var rv []*v2.Resource
-	bag, pageToken, err := getToken(pToken, roleResourceType)
+	bag, pageToken, err := getToken(&attrs.PageToken, groupResourceType)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	groups, nextPageToken, annotation, err := g.client.ListGroups(ctx, client.PageOptions{
 		Page:    pageToken,
-		PerPage: pToken.Size,
+		PerPage: attrs.PageToken.Size,
 	})
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	err = bag.Next(nextPageToken)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	for _, group := range groups {
 		userResource, err := parseIntoGroupResource(ctx, group, parentResourceID)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 		rv = append(rv, userResource)
 	}
 
 	nextPageToken, err = bag.Marshal()
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
-	return rv, nextPageToken, annotation, nil
+	return rv, &rs.SyncOpResults{
+		NextPageToken: nextPageToken,
+		Annotations:   annotation,
+	}, nil
 }
 
-func (g *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (g *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	var rv []*v2.Entitlement
 	const permissionName = "member"
 
@@ -80,32 +79,38 @@ func (g *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ 
 
 	rv = append(rv, entitlement.NewPermissionEntitlement(resource, permissionName, assigmentOptions...))
 
-	return rv, "", nil, nil
+	return rv, &rs.SyncOpResults{}, nil
 }
 
-func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource, attrs rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	var rv []*v2.Grant
-	err := g.GetAgentsDetails(ctx)
+
+	agentDetailsMap, err := g.client.GetAllAgentDetails(ctx, attrs.Session)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, fmt.Errorf("freshdesk-connector: failed to get agent details: %w", err)
 	}
 
-	for _, agentDetail := range g.agentsDetails {
-		const permissionName = "member"
+	if len(agentDetailsMap) == 0 {
+		return nil, &rs.SyncOpResults{}, nil
+	}
 
-		value, err := strconv.Atoi(resource.Id.Resource)
-		if err != nil {
-			return nil, "", nil, err
-		}
+	groupIDInt, err := strconv.Atoi(resource.Id.Resource)
+	if err != nil {
+		return nil, nil, fmt.Errorf("freshdesk-connector: failed to parse group ID: %w", err)
+	}
 
-		if slices.Contains(agentDetail.GroupIDs, int64(value)) {
-			userResource, _ := parseIntoUserResource(&agentDetail, nil)
-
-			membershipGrant := grant.NewGrant(resource, permissionName, userResource.Id)
+	for _, agentDetail := range agentDetailsMap {
+		if slices.Contains(agentDetail.GroupIDs, int64(groupIDInt)) {
+			userResource, err := parseIntoUserResource(agentDetail, nil)
+			if err != nil {
+				return nil, nil, fmt.Errorf("freshdesk-connector: failed to create user resource: %w", err)
+			}
+			membershipGrant := grant.NewGrant(resource, "member", userResource.Id)
 			rv = append(rv, membershipGrant)
 		}
 	}
-	return rv, "", nil, nil
+
+	return rv, &rs.SyncOpResults{}, nil
 }
 
 func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
@@ -122,13 +127,13 @@ func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitl
 
 	agentID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to parse agent ID: %v", err)
+		return nil, fmt.Errorf("freshdesk-connector: failed to parse agent ID: %w", err)
 	}
 	groupID := entitlement.Resource.Id.Resource
 
 	group, _, err := g.client.GetGroup(ctx, groupID)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get group details: %v", err)
+		return nil, fmt.Errorf("freshdesk-connector: failed to get group details: %w", err)
 	}
 
 	if slices.Contains(group.AgentIDs, agentID) {
@@ -142,7 +147,7 @@ func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitl
 	}
 	_, annos, err := g.client.UpdateGroup(ctx, groupID, payload)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update group members: %v", err)
+		return nil, fmt.Errorf("freshdesk-connector: failed to update group members: %w", err)
 	}
 
 	return annos, nil
@@ -165,13 +170,13 @@ func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations
 
 	agentID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to parse agent ID: %v", err)
+		return nil, fmt.Errorf("freshdesk-connector: failed to parse agent ID: %w", err)
 	}
 	groupID := entitlement.Resource.Id.Resource
 
 	group, _, err := g.client.GetGroup(ctx, groupID)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get group details: %v", err)
+		return nil, fmt.Errorf("freshdesk-connector: failed to get group details: %w", err)
 	}
 
 	if !slices.Contains(group.AgentIDs, agentID) {
@@ -190,7 +195,7 @@ func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations
 	}
 	_, annos, err := g.client.UpdateGroup(ctx, groupID, payload)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update group members: %v", err)
+		return nil, fmt.Errorf("freshdesk-connector: failed to update group members: %w", err)
 	}
 
 	return annos, nil
@@ -228,74 +233,3 @@ func parseIntoGroupResource(_ context.Context, group *client.Group, parentResour
 	return ret, nil
 }
 
-func (g *groupBuilder) GetAgentsDetails(ctx context.Context) error {
-	g.agentDetailMutex.Lock()
-	defer g.agentDetailMutex.Unlock()
-
-	if g.agentsDetails != nil || len(g.agentsDetails) > 0 {
-		return nil
-	}
-
-	IDs, err := g.GetAllAgentsIDs(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(IDs) == 0 {
-		return fmt.Errorf("no agents found")
-	}
-
-	for _, id := range IDs {
-		agentDetail, _, err := g.client.GetAgentDetail(ctx, id)
-		if err != nil {
-			return err
-		}
-
-		g.agentsDetails = append(g.agentsDetails, *agentDetail)
-	}
-
-	return nil
-}
-
-func (g *groupBuilder) GetAllAgentsIDs(ctx context.Context) ([]string, error) {
-	var rv []string
-	paginationToken := pagination.Token{Size: 50, Token: ""}
-
-	for {
-		bag, pageToken, err := getToken(&paginationToken, userResourceType)
-		if err != nil {
-			return nil, err
-		}
-
-		agents, nextPageToken, _, err := g.client.ListAgents(ctx, client.PageOptions{
-			Page:    pageToken,
-			PerPage: paginationToken.Size,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		err = bag.Next(nextPageToken)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, agent := range agents {
-			agentID := strconv.FormatInt(agent.ID, 10)
-
-			rv = append(rv, agentID)
-		}
-
-		nextPageToken, err = bag.Marshal()
-		if err != nil {
-			return nil, err
-		}
-
-		if nextPageToken == "" {
-			break
-		}
-		paginationToken.Token = nextPageToken
-	}
-
-	return rv, nil
-}
