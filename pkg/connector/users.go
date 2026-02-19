@@ -2,11 +2,14 @@ package connector
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 )
 
@@ -107,9 +110,32 @@ func (u *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncO
 	return nil, &rs.SyncOpResults{}, nil
 }
 
-// Grants always returns an empty slice for users since they don't have any entitlements.
-func (u *userBuilder) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	return nil, &rs.SyncOpResults{}, nil
+// Grants returns role and group grants for the given user by fetching their agent detail.
+func (u *userBuilder) Grants(ctx context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	agentDetail, _, err := u.client.GetAgentDetail(ctx, resource.Id.Resource)
+	if err != nil {
+		return nil, nil, fmt.Errorf("freshdesk-connector: failed to get agent detail: %w", err)
+	}
+
+	var rv []*v2.Grant
+
+	for _, roleID := range agentDetail.RoleIDs {
+		roleGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+			ResourceType: roleResourceType.Id,
+			Resource:     strconv.FormatInt(roleID, 10),
+		}}, "assigned", resource.Id)
+		rv = append(rv, roleGrant)
+	}
+
+	for _, groupID := range agentDetail.GroupIDs {
+		groupGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+			ResourceType: groupResourceType.Id,
+			Resource:     strconv.FormatInt(groupID, 10),
+		}}, "member", resource.Id)
+		rv = append(rv, groupGrant)
+	}
+
+	return rv, &rs.SyncOpResults{}, nil
 }
 
 // CreateAccountCapabilityDetails returns the account provisioning capabilities of this connector.

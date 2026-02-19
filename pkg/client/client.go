@@ -10,11 +10,8 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/session"
-	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
-	"go.uber.org/zap"
 	"github.com/tomnomnom/linkheader"
 )
 
@@ -27,8 +24,6 @@ const (
 	groupsEndpoint = "/api/v2/groups"
 	rolesEndpoint  = "/api/v2/roles"
 )
-
-var agentDetailsNamespace = sessions.WithPrefix("agent_detail")
 
 type FreshdeskClient struct {
 	httpClient   *uhttp.BaseHttpClient
@@ -332,51 +327,6 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	return anno, nil
 }
 
-// GetAllAgentDetails retrieves all agent details from session store, or falls back to paginating the API.
-func (f *FreshdeskClient) GetAllAgentDetails(ctx context.Context, ss sessions.SessionStore) (map[string]*Agent, error) {
-	if ss != nil {
-		agents, err := session.GetAllJSON[*Agent](ctx, ss, agentDetailsNamespace)
-		if err != nil {
-			ctxzap.Extract(ctx).Debug("freshdesk-connector: failed to get cached agents, fetching from API", zap.Error(err))
-		}
-		if len(agents) > 0 {
-			return agents, nil
-		}
-	}
-
-	result := make(map[string]*Agent)
-	page := 0
-	for {
-		agents, nextPage, _, err := f.ListAgents(ctx, PageOptions{Page: page, PerPage: ItemsPerPage})
-		if err != nil {
-			return nil, fmt.Errorf("freshdesk-connector: failed to list agents: %w", err)
-		}
-		for _, a := range agents {
-			agentID := strconv.FormatInt(a.ID, 10)
-			detail, _, err := f.GetAgentDetail(ctx, agentID)
-			if err != nil {
-				return nil, fmt.Errorf("freshdesk-connector: failed to fetch agent %s: %w", agentID, err)
-			}
-			result[agentID] = detail
-		}
-		if nextPage == "" {
-			break
-		}
-		nextPageInt, err := strconv.Atoi(nextPage)
-		if err != nil {
-			return nil, fmt.Errorf("freshdesk-connector: failed to parse next page token: %w", err)
-		}
-		page = nextPageInt
-	}
-
-	if ss != nil && len(result) > 0 {
-		if err := session.SetManyJSON(ctx, ss, result, agentDetailsNamespace); err != nil {
-			ctxzap.Extract(ctx).Debug("freshdesk-connector: failed to cache agents", zap.Error(err))
-		}
-	}
-
-	return result, nil
-}
 
 // define error struct.
 type freshdeskAPIError struct {

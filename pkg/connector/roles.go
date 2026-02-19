@@ -11,7 +11,6 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
-	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
@@ -80,35 +79,8 @@ func (r *roleBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ r
 	return rv, &rs.SyncOpResults{}, nil
 }
 
-func (r *roleBuilder) Grants(ctx context.Context, resource *v2.Resource, attrs rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	var rv []*v2.Grant
-
-	agentDetailsMap, err := r.client.GetAllAgentDetails(ctx, attrs.Session)
-	if err != nil {
-		return nil, nil, fmt.Errorf("freshdesk-connector: failed to get agent details: %w", err)
-	}
-
-	if len(agentDetailsMap) == 0 {
-		return nil, &rs.SyncOpResults{}, nil
-	}
-
-	roleIDInt, err := strconv.Atoi(resource.Id.Resource)
-	if err != nil {
-		return nil, nil, fmt.Errorf("freshdesk-connector: failed to parse role ID: %w", err)
-	}
-
-	for _, agentDetail := range agentDetailsMap {
-		if slices.Contains(agentDetail.RoleIDs, int64(roleIDInt)) {
-			userResource, err := parseIntoUserResource(agentDetail, nil)
-			if err != nil {
-				return nil, nil, fmt.Errorf("freshdesk-connector: failed to create user resource: %w", err)
-			}
-			membershipGrant := grant.NewGrant(resource, "assigned", userResource.Id)
-			rv = append(rv, membershipGrant)
-		}
-	}
-
-	return rv, &rs.SyncOpResults{}, nil
+func (r *roleBuilder) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	return nil, &rs.SyncOpResults{}, nil
 }
 
 func (r *roleBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
