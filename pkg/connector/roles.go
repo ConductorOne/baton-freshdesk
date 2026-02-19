@@ -79,6 +79,7 @@ func (r *roleBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ r
 	return rv, &rs.SyncOpResults{}, nil
 }
 
+// Grants are emitted from userBuilder.Grants() in users.go instead.
 func (r *roleBuilder) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	return nil, &rs.SyncOpResults{}, nil
 }

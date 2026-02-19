@@ -81,6 +81,7 @@ func (g *groupBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ 
 	return rv, &rs.SyncOpResults{}, nil
 }
 
+// Grants are emitted from userBuilder.Grants() in users.go instead.
 func (g *groupBuilder) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	return nil, &rs.SyncOpResults{}, nil
 }
