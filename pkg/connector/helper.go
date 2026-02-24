@@ -9,7 +9,7 @@ import (
 
 func getToken(pToken *pagination.Token, resourceType *v2.ResourceType) (*pagination.Bag, int, error) {
 	var pageToken int
-	_, bag, err := unmarshalSkipToken(pToken)
+	bag, err := unmarshalSkipToken(pToken)
 	if err != nil {
 		return bag, 0, err
 	}
@@ -30,22 +30,11 @@ func getToken(pToken *pagination.Token, resourceType *v2.ResourceType) (*paginat
 	return bag, pageToken, nil
 }
 
-func unmarshalSkipToken(token *pagination.Token) (int32, *pagination.Bag, error) {
+func unmarshalSkipToken(token *pagination.Token) (*pagination.Bag, error) {
 	b := &pagination.Bag{}
 	err := b.Unmarshal(token.Token)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
-	current := b.Current()
-
-	ret := int32(0)
-	if current != nil && current.Token != "" {
-		currentToken, err := strconv.ParseInt(current.Token, 10, 32)
-		if err != nil {
-			return 0, nil, err
-		}
-		ret = int32(currentToken)
-	}
-
-	return ret, b, nil
+	return b, nil
 }

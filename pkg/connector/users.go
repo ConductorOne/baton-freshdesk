@@ -2,12 +2,14 @@ package connector
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 )
 
@@ -16,7 +18,7 @@ type userBuilder struct {
 	client       *client.FreshdeskClient
 }
 
-var _ connectorbuilder.AccountManager = &userBuilder{}
+var _ connectorbuilder.AccountManagerV2 = &userBuilder{}
 
 func (u *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
@@ -24,41 +26,44 @@ func (u *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 
 // List returns all the users from the database as resource objects.
 // Users include a UserTrait because they are the 'shape' of a standard user.
-func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, attrs rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	var rv []*v2.Resource
 
-	bag, pageToken, err := getToken(pToken, userResourceType)
+	bag, pageToken, err := getToken(&attrs.PageToken, userResourceType)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	agents, nextPageToken, annotation, err := u.client.ListAgents(ctx, client.PageOptions{
 		Page:    pageToken,
-		PerPage: pToken.Size,
+		PerPage: attrs.PageToken.Size,
 	})
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	err = bag.Next(nextPageToken)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	for _, agent := range agents {
 		userResource, err := parseIntoUserResource(agent, parentResourceID)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 		rv = append(rv, userResource)
 	}
 
 	nextPageToken, err = bag.Marshal()
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
-	return rv, nextPageToken, annotation, nil
+	return rv, &rs.SyncOpResults{
+		NextPageToken: nextPageToken,
+		Annotations:   annotation,
+	}, nil
 }
 
 // parseIntoUserResource - This function parses an Agent (users from Freshdesk) into a User Resource.
@@ -101,13 +106,36 @@ func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId)
 }
 
 // Entitlements always returns an empty slice for users.
-func (u *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (u *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	return nil, &rs.SyncOpResults{}, nil
 }
 
-// Grants always returns an empty slice for users since they don't have any entitlements.
-func (u *userBuilder) Grants(_ context.Context, _ *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+// Grants returns role and group grants for the given user by fetching their agent detail.
+func (u *userBuilder) Grants(ctx context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	agentDetail, _, err := u.client.GetAgentDetail(ctx, resource.Id.Resource)
+	if err != nil {
+		return nil, nil, fmt.Errorf("freshdesk-connector: failed to get agent detail: %w", err)
+	}
+
+	var rv []*v2.Grant
+
+	for _, roleID := range agentDetail.RoleIDs {
+		roleGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+			ResourceType: roleResourceType.Id,
+			Resource:     strconv.FormatInt(roleID, 10),
+		}}, "assigned", resource.Id)
+		rv = append(rv, roleGrant)
+	}
+
+	for _, groupID := range agentDetail.GroupIDs {
+		groupGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+			ResourceType: groupResourceType.Id,
+			Resource:     strconv.FormatInt(groupID, 10),
+		}}, "member", resource.Id)
+		rv = append(rv, groupGrant)
+	}
+
+	return rv, &rs.SyncOpResults{}, nil
 }
 
 // CreateAccountCapabilityDetails returns the account provisioning capabilities of this connector.

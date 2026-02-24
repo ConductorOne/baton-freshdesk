@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -19,7 +18,7 @@ import (
 // Endpoints available for Freshdesk APIs.
 // https://developers.freshdesk.com/api/#intro .
 const (
-	baseURL = "https://.freshdesk.com"
+	freshdeskBaseURL = "https://%s.freshdesk.com"
 
 	agentsEndpoint = "/api/v2/agents"
 	groupsEndpoint = "/api/v2/groups"
@@ -38,7 +37,7 @@ type Option func(client *FreshdeskClient)
 func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
 	freshdeskClient := &FreshdeskClient{
 		httpClient:   &uhttp.BaseHttpClient{},
-		freshdeskURL: baseURL,
+		freshdeskURL: "",
 		domain:       "",
 		token:        "",
 	}
@@ -57,12 +56,7 @@ func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
 		return nil, err
 	}
 
-	dotIndex := strings.Index(baseURL, ".")
-	if dotIndex == -1 {
-		return nil, fmt.Errorf("invalid URL: %s", baseURL)
-	}
-
-	fdURL := baseURL[:dotIndex] + freshdeskClient.domain + baseURL[dotIndex:]
+	fdURL := fmt.Sprintf(freshdeskBaseURL, freshdeskClient.domain)
 	if !isValidUrl(fdURL) {
 		return nil, fmt.Errorf("the URL: %s is not valid", fdURL)
 	}
@@ -332,6 +326,7 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 
 	return anno, nil
 }
+
 
 // define error struct.
 type freshdeskAPIError struct {

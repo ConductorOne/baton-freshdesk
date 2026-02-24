@@ -420,6 +420,13 @@ func (c *C1File) init(ctx context.Context) error {
 		l.Warn("c1file-init: WAL checkpoint after init failed", zap.Error(err))
 	}
 
+	// // Checkpoint the WAL after migrations. Migrations like backfillGrantExpansionColumn
+	// // can update many rows, filling the WAL. Without a checkpoint, subsequent reads are
+	// // slow because SQLite must scan the WAL hash table for every page read.
+	if _, err = c.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		l.Warn("WAL checkpoint after init failed", zap.Error(err))
+	}
+
 	if c.readOnly {
 		// Disable journaling in read only mode, since we're not writing to the database.
 		_, err = c.db.ExecContext(ctx, "PRAGMA journal_mode = OFF")

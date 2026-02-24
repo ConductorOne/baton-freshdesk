@@ -11,6 +11,7 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/cli"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 )
 
@@ -19,8 +20,8 @@ type Connector struct {
 }
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
-func (d *Connector) ResourceSyncers(_ context.Context) []connectorbuilder.ResourceSyncer {
-	return []connectorbuilder.ResourceSyncer{
+func (d *Connector) ResourceSyncers(_ context.Context) []connectorbuilder.ResourceSyncerV2 {
+	return []connectorbuilder.ResourceSyncerV2{
 		newUserBuilder(d.client),
 		newRoleBuilder(d.client),
 		newGroupBuilder(d.client),
@@ -95,7 +96,7 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, cfg *cfg.Freshdesk) (*Connector, error) {
+func New(ctx context.Context, cfg *cfg.Freshdesk, opts *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
 	freshdeskClient, err := client.New(
 		ctx,
 		client.WithDomain(cfg.Domain),
@@ -103,10 +104,12 @@ func New(ctx context.Context, cfg *cfg.Freshdesk) (*Connector, error) {
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &Connector{
+	cb := &Connector{
 		client: freshdeskClient,
-	}, nil
+	}
+
+	return cb, nil, nil
 }
