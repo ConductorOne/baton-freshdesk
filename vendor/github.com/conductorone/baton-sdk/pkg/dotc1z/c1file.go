@@ -420,13 +420,6 @@ func (c *C1File) init(ctx context.Context) error {
 		l.Warn("c1file-init: WAL checkpoint after init failed", zap.Error(err))
 	}
 
-	// // Checkpoint the WAL after migrations. Migrations like backfillGrantExpansionColumn
-	// // can update many rows, filling the WAL. Without a checkpoint, subsequent reads are
-	// // slow because SQLite must scan the WAL hash table for every page read.
-	if _, err = c.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
-		l.Warn("WAL checkpoint after init failed", zap.Error(err))
-	}
-
 	if c.readOnly {
 		// Disable journaling in read only mode, since we're not writing to the database.
 		_, err = c.db.ExecContext(ctx, "PRAGMA journal_mode = OFF")
@@ -480,18 +473,14 @@ func (c *C1File) InitTables(ctx context.Context) error {
 		query, args := t.Schema()
 		_, err = c.db.ExecContext(ctx, fmt.Sprintf(query, args...))
 		if err != nil {
+			l.Error("c1file-init-tables: error initializing table schema", zap.Error(err), zap.String("table_name", t.Name()))
 			return fmt.Errorf("c1file-init-tables: error initializing table %s: %w", t.Name(), err)
 		}
-		l.Debug("c1file-init-tables: initialized table schema, running migrations",
-			zap.String("table_name", t.Name()),
-		)
 		err = t.Migrations(ctx, c.db)
 		if err != nil {
+			l.Error("c1file-init-tables: error running migration", zap.Error(err), zap.String("table_name", t.Name()))
 			return fmt.Errorf("c1file-init-tables: error running migration for table %s: %w", t.Name(), err)
 		}
-		l.Debug("c1file-init-tables: ran migrations for table",
-			zap.String("table_name", t.Name()),
-		)
 	}
 
 	return nil
