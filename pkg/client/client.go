@@ -66,11 +66,9 @@ func New(ctx context.Context, opts ...Option) (*FreshdeskClient, error) {
 		}
 
 		freshdeskClient.freshdeskURL = fdURL
-	} else {
-		// Custom base URL provided - validate it
-		if !isValidUrl(freshdeskClient.freshdeskURL) {
-			return nil, fmt.Errorf("the URL: %s is not valid", freshdeskClient.freshdeskURL)
-		}
+	} else if !isValidUrl(freshdeskClient.freshdeskURL) {
+		// Custom base URL provided - validate it.
+		return nil, fmt.Errorf("the URL: %s is not valid", freshdeskClient.freshdeskURL)
 	}
 
 	return freshdeskClient, nil
