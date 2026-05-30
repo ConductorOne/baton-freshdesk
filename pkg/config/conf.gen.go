@@ -6,6 +6,7 @@ import "reflect"
 type Freshdesk struct {
 	ApiKey string `mapstructure:"api-key"`
 	Domain string `mapstructure:"domain"`
+	BaseUrl string `mapstructure:"base-url"`
 }
 
 func (c *Freshdesk) findFieldByTag(tagValue string) (any, bool) {
