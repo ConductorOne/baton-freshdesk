@@ -20,7 +20,6 @@ func (m Matcher) Import(pkgPath string) {}
 // and package name conflicts (e.g. "x/path" vs "y/path").
 func (m Matcher) ImportAs(pkgPath, localName string) {}
 
-
 // Match specifies a set of patterns that match a rule being defined.
 // Pattern matching succeeds if at least 1 pattern matches.
 //
