@@ -16,15 +16,21 @@ import (
 )
 
 type Connector struct {
-	client     *client.FreshdeskClient
-	syncRoles  bool
-	syncGroups bool
+	client *client.FreshdeskClient
+	// rolesExcluded/groupsExcluded record whether the role/group resource type has been
+	// explicitly excluded from the sync filter. They default to false (i.e. "included") on
+	// the zero value, which matters because connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2
+	// constructs a bare &Connector{} for the `capabilities` CLI command, bypassing New() and
+	// its opts entirely -- the zero value must mean "sync everything", the same default New()
+	// applies when opts is nil.
+	rolesExcluded  bool
+	groupsExcluded bool
 }
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(_ context.Context) []connectorbuilder.ResourceSyncerV2 {
 	return []connectorbuilder.ResourceSyncerV2{
-		newUserBuilder(d.client, d.syncRoles, d.syncGroups),
+		newUserBuilder(d.client, d.rolesExcluded, d.groupsExcluded),
 		newRoleBuilder(d.client),
 		newGroupBuilder(d.client),
 	}
@@ -112,17 +118,16 @@ func New(ctx context.Context, cfg *cfg.Freshdesk, opts *cli.ConnectorOpts) (conn
 		return nil, nil, err
 	}
 
-	syncRoles := true
-	syncGroups := true
+	var rolesExcluded, groupsExcluded bool
 	if opts != nil {
-		syncRoles = opts.WillSyncResourceType(RoleResourceTypeID)
-		syncGroups = opts.WillSyncResourceType(GroupResourceTypeID)
+		rolesExcluded = !opts.WillSyncResourceType(RoleResourceTypeID)
+		groupsExcluded = !opts.WillSyncResourceType(GroupResourceTypeID)
 	}
 
 	cb := &Connector{
-		client:     freshdeskClient,
-		syncRoles:  syncRoles,
-		syncGroups: syncGroups,
+		client:         freshdeskClient,
+		rolesExcluded:  rolesExcluded,
+		groupsExcluded: groupsExcluded,
 	}
 
 	return cb, nil, nil

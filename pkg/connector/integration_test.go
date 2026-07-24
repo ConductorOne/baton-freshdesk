@@ -39,7 +39,7 @@ func TestUserBuilderList(t *testing.T) {
 		t.Errorf("ERROR: Failed to create client: %v", err)
 	}
 
-	u := newUserBuilder(c, true, true)
+	u := newUserBuilder(c, false, false)
 	res, _, err := u.List(ctx, parentResourceID, attrs)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)

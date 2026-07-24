@@ -2,91 +2,65 @@ package connector
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/conductorone/baton-freshdesk/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
-	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// newTestFreshdeskClient spins up an httptest.Server that returns a fixed agent detail
-// payload for GET /api/v2/agents/{id}, and returns a client pointed at it.
-func newTestFreshdeskClient(t *testing.T, agent client.Agent) (*client.FreshdeskClient, func()) {
-	t.Helper()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(agent)
-		require.NoError(t, err)
-	}))
-
-	c, err := client.New(
-		context.Background(),
-		client.WithDomain("test"),
-		client.WithBearerToken("token"),
-		client.WithBaseURL(srv.URL),
-	)
-	require.NoError(t, err)
-
-	return c, srv.Close
-}
-
-// TestUserBuilderGrants_WillSyncResourceType asserts that cross-type role/group grant emission
-// in userBuilder.Grants() is gated on whether the target resource type is actually being synced:
-// when a target type is filtered out of the sync, no grants for that type should be emitted.
-func TestUserBuilderGrants_WillSyncResourceType(t *testing.T) {
-	agent := client.Agent{
-		ID:       1,
-		RoleIDs:  []int64{10, 11},
-		GroupIDs: []int64{20},
-	}
-
-	principal := &v2.Resource{Id: &v2.ResourceId{ResourceType: UserResourceTypeID, Resource: "1"}}
-
-	tests := []struct {
-		name       string
-		syncRoles  bool
-		syncGroups bool
-		wantRole   bool
-		wantGroup  bool
+// TestUserBuilderResourceType_WillSyncResourceType asserts that userBuilder.ResourceType()
+// annotates the (cloned) user resource type based on whether the cross-type grant targets
+// emitted from Grants() (role, group) are actually being synced: SkipEntitlements when at
+// least one target is synced (Grants() must still run), SkipEntitlementsAndGrants when
+// neither is (Grants() need not run at all).
+func TestUserBuilderResourceType_WillSyncResourceType(t *testing.T) {
+	cases := []struct {
+		name           string
+		rolesExcluded  bool
+		groupsExcluded bool
+		wantSkip       string // "entitlements" or "entitlements_and_grants"
 	}{
-		{name: "both synced", syncRoles: true, syncGroups: true, wantRole: true, wantGroup: true},
-		{name: "role filtered out", syncRoles: false, syncGroups: true, wantRole: false, wantGroup: true},
-		{name: "group filtered out", syncRoles: true, syncGroups: false, wantRole: true, wantGroup: false},
-		{name: "both filtered out", syncRoles: false, syncGroups: false, wantRole: false, wantGroup: false},
+		{name: "both synced", rolesExcluded: false, groupsExcluded: false, wantSkip: "entitlements"},
+		{name: "role filtered out only", rolesExcluded: true, groupsExcluded: false, wantSkip: "entitlements"},
+		{name: "group filtered out only", rolesExcluded: false, groupsExcluded: true, wantSkip: "entitlements"},
+		{name: "both filtered out", rolesExcluded: true, groupsExcluded: true, wantSkip: "entitlements_and_grants"},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			c, closeFn := newTestFreshdeskClient(t, agent)
-			defer closeFn()
+			u := newUserBuilder(nil, tt.rolesExcluded, tt.groupsExcluded)
 
-			u := newUserBuilder(c, tt.syncRoles, tt.syncGroups)
+			rt := u.ResourceType(context.Background())
+			anno := annotations.Annotations(rt.GetAnnotations())
 
-			grants, _, err := u.Grants(context.Background(), principal, rs.SyncOpAttrs{})
-			assert.NoError(t, err)
-
-			var gotRole, gotGroup bool
-			for _, g := range grants {
-				switch g.Entitlement.Resource.Id.ResourceType {
-				case RoleResourceTypeID:
-					gotRole = true
-				case GroupResourceTypeID:
-					gotGroup = true
-				}
+			switch tt.wantSkip {
+			case "entitlements":
+				assert.True(t, anno.Contains(&v2.SkipEntitlements{}), "expected SkipEntitlements")
+				assert.False(t, anno.Contains(&v2.SkipEntitlementsAndGrants{}), "did not expect SkipEntitlementsAndGrants")
+			case "entitlements_and_grants":
+				assert.True(t, anno.Contains(&v2.SkipEntitlementsAndGrants{}), "expected SkipEntitlementsAndGrants")
 			}
 
-			assert.Equal(t, tt.wantRole, gotRole, "role grant emission")
-			assert.Equal(t, tt.wantGroup, gotGroup, "group grant emission")
-
-			if !tt.syncRoles && !tt.syncGroups {
-				assert.Nil(t, grants, "no HTTP call/grants should be produced when both targets are filtered out")
-			}
+			// The package-level resource type must never be mutated by ResourceType().
+			assert.Empty(t, userResourceType.GetAnnotations(), "package-level userResourceType must not be mutated")
 		})
 	}
+}
+
+// TestUserBuilderResourceType_ZeroValueDefaultsToSyncAll guards against a regression where the
+// zero-value userBuilder (as constructed by connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2,
+// which builds a bare &Connector{} for the `capabilities` CLI command and bypasses New()/opts
+// entirely) would report the connector as excluding role/group sync by default. The zero value of
+// rolesExcluded/groupsExcluded must mean "included" so the generated capabilities metadata matches
+// the actual default (sync everything) behavior.
+func TestUserBuilderResourceType_ZeroValueDefaultsToSyncAll(t *testing.T) {
+	var u userBuilder
+	u.resourceType = userResourceType
+
+	rt := u.ResourceType(context.Background())
+	anno := annotations.Annotations(rt.GetAnnotations())
+
+	assert.True(t, anno.Contains(&v2.SkipEntitlements{}), "zero-value userBuilder should behave as sync-all (SkipEntitlements)")
+	assert.False(t, anno.Contains(&v2.SkipEntitlementsAndGrants{}), "zero-value userBuilder must not report SkipEntitlementsAndGrants")
 }
