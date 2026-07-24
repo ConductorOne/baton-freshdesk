@@ -16,6 +16,8 @@ import (
 type userBuilder struct {
 	resourceType *v2.ResourceType
 	client       *client.FreshdeskClient
+	syncRoles    bool
+	syncGroups   bool
 }
 
 var _ connectorbuilder.AccountManagerV2 = &userBuilder{}
@@ -47,8 +49,9 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		return nil, nil, err
 	}
 
+	skipEntitlementsAndGrants := !u.syncRoles && !u.syncGroups
 	for _, agent := range agents {
-		userResource, err := parseIntoUserResource(agent, parentResourceID)
+		userResource, err := parseIntoUserResource(agent, parentResourceID, skipEntitlementsAndGrants)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -67,7 +70,10 @@ func (u *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 }
 
 // parseIntoUserResource - This function parses an Agent (users from Freshdesk) into a User Resource.
-func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+// skipEntitlementsAndGrants should be true when neither the role nor the group resource type is
+// being synced, since this resource has no entitlements of its own and its only grants are the
+// cross-type role/group grants emitted from Grants() below.
+func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId, skipEntitlementsAndGrants bool) (*v2.Resource, error) {
 	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 
 	profile := map[string]interface{}{
@@ -91,12 +97,19 @@ func parseIntoUserResource(agent *client.Agent, parentResourceID *v2.ResourceId)
 		displayName = agent.Contact.Email
 	}
 
+	resourceOpts := []rs.ResourceOption{
+		rs.WithParentResourceID(parentResourceID),
+	}
+	if skipEntitlementsAndGrants {
+		resourceOpts = append(resourceOpts, rs.WithAnnotation(&v2.SkipEntitlementsAndGrants{}))
+	}
+
 	ret, err := rs.NewUserResource(
 		displayName,
 		userResourceType,
 		agent.ID,
 		userTraits,
-		rs.WithParentResourceID(parentResourceID),
+		resourceOpts...,
 	)
 	if err != nil {
 		return nil, err
@@ -111,7 +124,16 @@ func (u *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncO
 }
 
 // Grants returns role and group grants for the given user by fetching their agent detail.
+// This is a cross-type optimization: the Freshdesk agent detail response already includes the
+// user's roles and groups, so we emit those grants here instead of round-tripping through the
+// role/group builders. Each target type's emission is gated on whether the customer's sync
+// filter actually includes that type (see cli.ConnectorOpts.WillSyncResourceType), so a
+// role/group-excluding filter doesn't produce dangling grants for un-synced resource types.
 func (u *userBuilder) Grants(ctx context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	if !u.syncRoles && !u.syncGroups {
+		return nil, &rs.SyncOpResults{}, nil
+	}
+
 	agentDetail, _, err := u.client.GetAgentDetail(ctx, resource.Id.Resource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("freshdesk-connector: failed to get agent detail: %w", err)
@@ -119,20 +141,24 @@ func (u *userBuilder) Grants(ctx context.Context, resource *v2.Resource, _ rs.Sy
 
 	var rv []*v2.Grant
 
-	for _, roleID := range agentDetail.RoleIDs {
-		roleGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
-			ResourceType: roleResourceType.Id,
-			Resource:     strconv.FormatInt(roleID, 10),
-		}}, "assigned", resource.Id)
-		rv = append(rv, roleGrant)
+	if u.syncRoles {
+		for _, roleID := range agentDetail.RoleIDs {
+			roleGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+				ResourceType: roleResourceType.Id,
+				Resource:     strconv.FormatInt(roleID, 10),
+			}}, "assigned", resource.Id)
+			rv = append(rv, roleGrant)
+		}
 	}
 
-	for _, groupID := range agentDetail.GroupIDs {
-		groupGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
-			ResourceType: groupResourceType.Id,
-			Resource:     strconv.FormatInt(groupID, 10),
-		}}, "member", resource.Id)
-		rv = append(rv, groupGrant)
+	if u.syncGroups {
+		for _, groupID := range agentDetail.GroupIDs {
+			groupGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+				ResourceType: groupResourceType.Id,
+				Resource:     strconv.FormatInt(groupID, 10),
+			}}, "member", resource.Id)
+			rv = append(rv, groupGrant)
+		}
 	}
 
 	return rv, &rs.SyncOpResults{}, nil
@@ -216,7 +242,7 @@ func (o *userBuilder) CreateAccount(
 		return nil, nil, annotation, err
 	}
 
-	userResource, err := parseIntoUserResource(agent, nil)
+	userResource, err := parseIntoUserResource(agent, nil, !o.syncRoles && !o.syncGroups)
 	if err != nil {
 		return nil, nil, annotation, err
 	}
@@ -235,9 +261,11 @@ func (u *userBuilder) Delete(ctx context.Context, resourceId *v2.ResourceId) (an
 	return profile, nil
 }
 
-func newUserBuilder(c *client.FreshdeskClient) *userBuilder {
+func newUserBuilder(c *client.FreshdeskClient, syncRoles, syncGroups bool) *userBuilder {
 	return &userBuilder{
 		resourceType: userResourceType,
 		client:       c,
+		syncRoles:    syncRoles,
+		syncGroups:   syncGroups,
 	}
 }

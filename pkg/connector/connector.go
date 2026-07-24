@@ -16,13 +16,15 @@ import (
 )
 
 type Connector struct {
-	client *client.FreshdeskClient
+	client     *client.FreshdeskClient
+	syncRoles  bool
+	syncGroups bool
 }
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(_ context.Context) []connectorbuilder.ResourceSyncerV2 {
 	return []connectorbuilder.ResourceSyncerV2{
-		newUserBuilder(d.client),
+		newUserBuilder(d.client, d.syncRoles, d.syncGroups),
 		newRoleBuilder(d.client),
 		newGroupBuilder(d.client),
 	}
@@ -110,8 +112,17 @@ func New(ctx context.Context, cfg *cfg.Freshdesk, opts *cli.ConnectorOpts) (conn
 		return nil, nil, err
 	}
 
+	syncRoles := true
+	syncGroups := true
+	if opts != nil {
+		syncRoles = opts.WillSyncResourceType(RoleResourceTypeID)
+		syncGroups = opts.WillSyncResourceType(GroupResourceTypeID)
+	}
+
 	cb := &Connector{
-		client: freshdeskClient,
+		client:     freshdeskClient,
+		syncRoles:  syncRoles,
+		syncGroups: syncGroups,
 	}
 
 	return cb, nil, nil
