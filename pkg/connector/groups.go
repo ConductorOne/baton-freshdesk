@@ -188,9 +188,7 @@ func parseIntoGroupResource(_ context.Context, group *client.Group, parentResour
 		"group_name": group.Name,
 	}
 
-	groupTraits := []rs.GroupTraitOption{
-		rs.WithGroupProfile(profile),
-	}
+	groupTraits := []rs.GroupTraitOption{}
 
 	ret, err := rs.NewGroupResource(
 		group.Name,
@@ -198,6 +196,7 @@ func parseIntoGroupResource(_ context.Context, group *client.Group, parentResour
 		group.ID,
 		groupTraits,
 		rs.WithParentResourceID(parentResourceID),
+		rs.WithResourceProfile(profile),
 	)
 	if err != nil {
 		return nil, err
@@ -205,4 +204,3 @@ func parseIntoGroupResource(_ context.Context, group *client.Group, parentResour
 
 	return ret, nil
 }
-

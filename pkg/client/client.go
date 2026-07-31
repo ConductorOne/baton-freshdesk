@@ -340,7 +340,6 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	return anno, nil
 }
 
-
 // define error struct.
 type freshdeskAPIError struct {
 	Description string `json:"description"`

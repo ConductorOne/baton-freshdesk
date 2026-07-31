@@ -155,7 +155,6 @@ func (r *roleBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 	return anno, nil
 }
 
-
 func newRoleBuilder(c *client.FreshdeskClient) *roleBuilder {
 	return &roleBuilder{
 		resourceType: roleResourceType,
@@ -171,11 +170,11 @@ func parseIntoRoleResource(_ context.Context, role *client.Role, _ *v2.ResourceI
 		"description": role.Description,
 	}
 
-	roleTraits := []rs.RoleTraitOption{
-		rs.WithRoleProfile(profile),
-	}
+	roleTraits := []rs.RoleTraitOption{}
 
-	ret, err := rs.NewRoleResource(role.Name, roleResourceType, role.ID, roleTraits)
+	ret, err := rs.NewRoleResource(role.Name, roleResourceType, role.ID, roleTraits,
+		rs.WithResourceProfile(profile),
+	)
 	if err != nil {
 		return nil, err
 	}
