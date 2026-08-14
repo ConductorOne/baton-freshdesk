@@ -38,6 +38,11 @@
         "traits": [
           "TRAIT_USER"
         ],
+        "annotations": [
+          {
+            "@type": "type.googleapis.com/c1.connector.v2.SkipEntitlements"
+          }
+        ],
         "description": "The Agents are the users for Freshdesk"
       },
       "capabilities": [
