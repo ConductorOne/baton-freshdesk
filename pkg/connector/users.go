@@ -11,17 +11,23 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"google.golang.org/protobuf/proto"
 )
 
 type userBuilder struct {
 	resourceType *v2.ResourceType
 	client       *client.FreshdeskClient
+	// skip*ResourceType report whether each cross-type grant target is excluded
+	// from the sync filter. Named for the skip condition so the zero value is
+	// safe: a zero-value Connector{} is used to generate the capability set.
+	skipRoleResourceType  bool
+	skipGroupResourceType bool
 }
 
 var _ connectorbuilder.AccountManagerV2 = &userBuilder{}
 
 func (u *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
-	return userResourceType
+	return u.resourceType
 }
 
 // List returns all the users from the database as resource objects.
@@ -119,20 +125,24 @@ func (u *userBuilder) Grants(ctx context.Context, resource *v2.Resource, _ rs.Sy
 
 	var rv []*v2.Grant
 
-	for _, roleID := range agentDetail.RoleIDs {
-		roleGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
-			ResourceType: roleResourceType.Id,
-			Resource:     strconv.FormatInt(roleID, 10),
-		}}, "assigned", resource.Id)
-		rv = append(rv, roleGrant)
+	if !u.skipRoleResourceType {
+		for _, roleID := range agentDetail.RoleIDs {
+			roleGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+				ResourceType: roleResourceType.Id,
+				Resource:     strconv.FormatInt(roleID, 10),
+			}}, "assigned", resource.Id)
+			rv = append(rv, roleGrant)
+		}
 	}
 
-	for _, groupID := range agentDetail.GroupIDs {
-		groupGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
-			ResourceType: groupResourceType.Id,
-			Resource:     strconv.FormatInt(groupID, 10),
-		}}, "member", resource.Id)
-		rv = append(rv, groupGrant)
+	if !u.skipGroupResourceType {
+		for _, groupID := range agentDetail.GroupIDs {
+			groupGrant := grant.NewGrant(&v2.Resource{Id: &v2.ResourceId{
+				ResourceType: groupResourceType.Id,
+				Resource:     strconv.FormatInt(groupID, 10),
+			}}, "member", resource.Id)
+			rv = append(rv, groupGrant)
+		}
 	}
 
 	return rv, &rs.SyncOpResults{}, nil
@@ -235,9 +245,24 @@ func (u *userBuilder) Delete(ctx context.Context, resourceId *v2.ResourceId) (an
 	return profile, nil
 }
 
-func newUserBuilder(c *client.FreshdeskClient) *userBuilder {
+// newUserBuilder returns the user syncer. Users have no entitlements of their
+// own, and their only grants are cross-type role and group grants, so when BOTH
+// are excluded the grants pass is skipped too. With either one still synced the
+// per-target guards in Grants do the filtering.
+func newUserBuilder(c *client.FreshdeskClient, skipRoleResourceType, skipGroupResourceType bool) *userBuilder {
+	rt := proto.Clone(userResourceType).(*v2.ResourceType)
+	annos := annotations.Annotations(rt.GetAnnotations())
+	if skipRoleResourceType && skipGroupResourceType {
+		annos.Update(&v2.SkipEntitlementsAndGrants{})
+	} else {
+		annos.Update(&v2.SkipEntitlements{})
+	}
+	rt.Annotations = annos
+
 	return &userBuilder{
-		resourceType: userResourceType,
-		client:       c,
+		resourceType:          rt,
+		client:                c,
+		skipRoleResourceType:  skipRoleResourceType,
+		skipGroupResourceType: skipGroupResourceType,
 	}
 }

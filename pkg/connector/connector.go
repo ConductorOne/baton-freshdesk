@@ -17,12 +17,17 @@ import (
 
 type Connector struct {
 	client *client.FreshdeskClient
+	// skip*ResourceType report whether each cross-type grant target is excluded
+	// from the sync filter. Named for the skip condition so the zero value is
+	// safe: a zero-value Connector{} is used to generate the capability set.
+	skipRoleResourceType  bool
+	skipGroupResourceType bool
 }
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(_ context.Context) []connectorbuilder.ResourceSyncerV2 {
 	return []connectorbuilder.ResourceSyncerV2{
-		newUserBuilder(d.client),
+		newUserBuilder(d.client, d.skipRoleResourceType, d.skipGroupResourceType),
 		newRoleBuilder(d.client),
 		newGroupBuilder(d.client),
 	}
@@ -110,8 +115,14 @@ func New(ctx context.Context, cfg *cfg.Freshdesk, opts *cli.ConnectorOpts) (conn
 		return nil, nil, err
 	}
 
+	// nil opts means no filter, so nothing is skipped.
+	skipRoleResourceType := opts != nil && !opts.WillSyncResourceType(RoleResourceTypeID)
+	skipGroupResourceType := opts != nil && !opts.WillSyncResourceType(GroupResourceTypeID)
+
 	cb := &Connector{
-		client: freshdeskClient,
+		client:                freshdeskClient,
+		skipRoleResourceType:  skipRoleResourceType,
+		skipGroupResourceType: skipGroupResourceType,
 	}
 
 	return cb, nil, nil
