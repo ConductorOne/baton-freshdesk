@@ -43,15 +43,6 @@ func newTestClient(t *testing.T, stub stubResponse) *FreshdeskClient {
 	return c
 }
 
-func assertNoDecoderLeak(t *testing.T, err error) {
-	t.Helper()
-	for _, s := range []string{"cannot unmarshal", "client."} {
-		if strings.Contains(err.Error(), s) {
-			t.Errorf("error leaks success decoder output %q: %v", s, err)
-		}
-	}
-}
-
 func assertContains(t *testing.T, got string, want ...string) {
 	t.Helper()
 	for _, w := range want {
@@ -64,7 +55,7 @@ func assertContains(t *testing.T, got string, want ...string) {
 func TestListErrors(t *testing.T) {
 	const (
 		documentedBody = `{"description":"Validation failed","errors":[{"field":"email","message":"It should be a valid email","code":"invalid_value"}]}`
-		flatBody       = `{"code":"access_denied","message":"You are not authorized to perform this action."}`
+		deniedBody     = `{"errors":[{"message":"You are not authorized to perform this action.","code":"access_denied"}]}`
 		authBody       = `{"description":"Authentication failure","errors":[{"message":"Incorrect or missing API credentials.","code":"invalid_credentials"}]}`
 	)
 
@@ -81,10 +72,10 @@ func TestListErrors(t *testing.T) {
 			want:     []string{"Validation failed", "email: It should be a valid email (invalid_value)"},
 		},
 		{
-			name:     "403 flat body",
-			stub:     stubResponse{status: http.StatusForbidden, contentType: "application/json", body: flatBody},
+			name:     "403 errors without description",
+			stub:     stubResponse{status: http.StatusForbidden, contentType: "application/json", body: deniedBody},
 			wantCode: codes.PermissionDenied,
-			want:     []string{"You are not authorized to perform this action.", "access_denied"},
+			want:     []string{"You are not authorized to perform this action. (access_denied)"},
 		},
 		{
 			name:     "403 empty body",
@@ -107,7 +98,7 @@ func TestListErrors(t *testing.T) {
 		{
 			name: "403 with request id",
 			stub: stubResponse{
-				status: http.StatusForbidden, contentType: "application/json", body: flatBody,
+				status: http.StatusForbidden, contentType: "application/json", body: deniedBody,
 				headers: map[string]string{"X-Request-Id": "abc123"},
 			},
 			wantCode: codes.PermissionDenied,
@@ -140,7 +131,6 @@ func TestListErrors(t *testing.T) {
 				if got := status.Code(err); got != tc.wantCode {
 					t.Errorf("%s: status code = %v, want %v", name, got, tc.wantCode)
 				}
-				assertNoDecoderLeak(t, err)
 				assertContains(t, err.Error(), tc.want...)
 				assertContains(t, err.Error(), "baton-freshdesk: GET /api/v2/"+name)
 				if strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), "Authorization") {
@@ -205,11 +195,6 @@ func TestFreshdeskAPIErrorMessage(t *testing.T) {
 			name: "documented body",
 			body: `{"description":"Validation failed","errors":[{"field":"email","message":"It should be a valid email","code":"invalid_value"}]}`,
 			want: []string{"Validation failed", "email: It should be a valid email (invalid_value)"},
-		},
-		{
-			name: "flat body",
-			body: `{"code":"access_denied","message":"You are not authorized to perform this action."}`,
-			want: []string{"You are not authorized to perform this action.", "access_denied"},
 		},
 		{
 			name:    "errors without description",

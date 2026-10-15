@@ -222,7 +222,7 @@ func (f *FreshdeskClient) doRequest(
 		uhttp.WithErrorResponse(&fdErr),
 	}
 	if (method == http.MethodGet || method == http.MethodPut || method == http.MethodPost) && res != nil {
-		doOptions = append(doOptions, withSuccessResponse(&res))
+		doOptions = append(doOptions, uhttp.WithResponse(&res))
 	}
 
 	resp, err = f.httpClient.Do(req, doOptions...)
@@ -241,17 +241,6 @@ func (f *FreshdeskClient) doRequest(
 	}
 
 	return resp.Header, annotation, nil
-}
-
-// withSuccessResponse only decodes 2xx bodies, since uhttp.WithResponse also runs on error responses.
-// Remove once the SDK checks the status itself.
-func withSuccessResponse(res any) uhttp.DoOption {
-	return func(resp *uhttp.WrapperResponse) error {
-		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-			return nil
-		}
-		return uhttp.WithResponse(res)(resp)
-	}
 }
 
 // wrapRequestError adds the X-Request-Id, which Freshdesk support asks for when investigating failed requests.
@@ -363,11 +352,8 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	return anno, nil
 }
 
-// freshdeskAPIError covers the documented {description, errors[]} body and the flat {code, message} body sent on some 403s.
 type freshdeskAPIError struct {
 	Description string `json:"description"`
-	ErrorCode   string `json:"code"`
-	Msg         string `json:"message"`
 	Errors      []struct {
 		Field   string `json:"field"`
 		Message string `json:"message"`
@@ -377,16 +363,8 @@ type freshdeskAPIError struct {
 
 func (e freshdeskAPIError) Message() string {
 	var parts []string
-
-	summary := e.Description
-	if summary == "" {
-		summary = e.Msg
-	}
-	if e.ErrorCode != "" {
-		summary = strings.TrimSpace(summary + " [" + e.ErrorCode + "]")
-	}
-	if summary != "" {
-		parts = append(parts, summary)
+	if e.Description != "" {
+		parts = append(parts, e.Description)
 	}
 
 	for _, fieldErr := range e.Errors {
