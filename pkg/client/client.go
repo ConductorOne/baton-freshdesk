@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -233,10 +234,21 @@ func (f *FreshdeskClient) doRequest(
 	annotation.WithRateLimiting(rlDesc)
 
 	if err != nil {
+		if resp != nil {
+			return nil, annotation, wrapRequestError(method, urlAddress.Path, resp.Header.Get("X-Request-Id"), err)
+		}
 		return nil, annotation, err
 	}
 
 	return resp.Header, annotation, nil
+}
+
+// wrapRequestError adds the X-Request-Id, which Freshdesk support asks for when investigating failed requests.
+func wrapRequestError(method, path, requestID string, err error) error {
+	if requestID == "" {
+		return fmt.Errorf("baton-freshdesk: %s %s: %w", method, path, err)
+	}
+	return fmt.Errorf("baton-freshdesk: %s %s (x-request-id=%s): %w", method, path, requestID, err)
 }
 
 func basicAuth(username, password string) string {
@@ -340,8 +352,6 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	return anno, nil
 }
 
-
-// define error struct.
 type freshdeskAPIError struct {
 	Description string `json:"description"`
 	Errors      []struct {
@@ -352,5 +362,26 @@ type freshdeskAPIError struct {
 }
 
 func (e freshdeskAPIError) Message() string {
-	return e.Description
+	var parts []string
+	if e.Description != "" {
+		parts = append(parts, e.Description)
+	}
+
+	for _, fieldErr := range e.Errors {
+		detail := fieldErr.Message
+		if fieldErr.Field != "" {
+			detail = strings.TrimSpace(fieldErr.Field + ": " + detail)
+		}
+		if fieldErr.Code != "" {
+			detail = strings.TrimSpace(detail + " (" + fieldErr.Code + ")")
+		}
+		if detail != "" {
+			parts = append(parts, detail)
+		}
+	}
+
+	if len(parts) == 0 {
+		return "no error detail in response body"
+	}
+	return strings.Join(parts, "; ")
 }
