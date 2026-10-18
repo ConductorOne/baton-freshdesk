@@ -352,8 +352,12 @@ func (f *FreshdeskClient) UpdateAgent(ctx context.Context, agent *Agent) (annota
 	return anno, nil
 }
 
+// freshdeskAPIError covers the documented {description, errors[]} body and the flat {code, message}
+// body Freshdesk sends on 401 and 403 (e.g. invalid_credentials, account_suspended).
 type freshdeskAPIError struct {
 	Description string `json:"description"`
+	ErrorCode   string `json:"code"`
+	Msg         string `json:"message"`
 	Errors      []struct {
 		Field   string `json:"field"`
 		Message string `json:"message"`
@@ -363,8 +367,16 @@ type freshdeskAPIError struct {
 
 func (e freshdeskAPIError) Message() string {
 	var parts []string
-	if e.Description != "" {
-		parts = append(parts, e.Description)
+
+	summary := e.Description
+	if summary == "" {
+		summary = e.Msg
+	}
+	if e.ErrorCode != "" {
+		summary = strings.TrimSpace(summary + " (" + e.ErrorCode + ")")
+	}
+	if summary != "" {
+		parts = append(parts, summary)
 	}
 
 	for _, fieldErr := range e.Errors {

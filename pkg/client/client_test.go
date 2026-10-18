@@ -43,6 +43,16 @@ func newTestClient(t *testing.T, stub stubResponse) *FreshdeskClient {
 	return c
 }
 
+// assertNoDecoderLeak checks that the success decoder's error, which names Go types, is not in a non-2xx error.
+func assertNoDecoderLeak(t *testing.T, err error) {
+	t.Helper()
+	for _, s := range []string{"cannot unmarshal", "client."} {
+		if strings.Contains(err.Error(), s) {
+			t.Errorf("error leaks success decoder output %q: %v", s, err)
+		}
+	}
+}
+
 func assertContains(t *testing.T, got string, want ...string) {
 	t.Helper()
 	for _, w := range want {
@@ -57,6 +67,9 @@ func TestListErrors(t *testing.T) {
 		documentedBody = `{"description":"Validation failed","errors":[{"field":"email","message":"It should be a valid email","code":"invalid_value"}]}`
 		deniedBody     = `{"errors":[{"message":"You are not authorized to perform this action.","code":"access_denied"}]}`
 		authBody       = `{"description":"Authentication failure","errors":[{"message":"Incorrect or missing API credentials.","code":"invalid_credentials"}]}`
+		// Flat bodies captured from Freshdesk by QA on CXP-1003.
+		suspendedBody = `{"code":"account_suspended","message":"Your account has been suspended."}`
+		loggedOutBody = `{"code":"invalid_credentials","message":"You have to be logged in to perform this action."}`
 	)
 
 	cases := []struct {
@@ -76,6 +89,18 @@ func TestListErrors(t *testing.T) {
 			stub:     stubResponse{status: http.StatusForbidden, contentType: "application/json", body: deniedBody},
 			wantCode: codes.PermissionDenied,
 			want:     []string{"You are not authorized to perform this action. (access_denied)"},
+		},
+		{
+			name:     "403 flat body",
+			stub:     stubResponse{status: http.StatusForbidden, contentType: "application/json", body: suspendedBody},
+			wantCode: codes.PermissionDenied,
+			want:     []string{"Request failed with status 403: Your account has been suspended. (account_suspended)"},
+		},
+		{
+			name:     "401 flat body",
+			stub:     stubResponse{status: http.StatusUnauthorized, contentType: "application/json", body: loggedOutBody},
+			wantCode: codes.Unauthenticated,
+			want:     []string{"Request failed with status 401: You have to be logged in to perform this action. (invalid_credentials)"},
 		},
 		{
 			name:     "403 empty body",
@@ -131,6 +156,7 @@ func TestListErrors(t *testing.T) {
 				if got := status.Code(err); got != tc.wantCode {
 					t.Errorf("%s: status code = %v, want %v", name, got, tc.wantCode)
 				}
+				assertNoDecoderLeak(t, err)
 				assertContains(t, err.Error(), tc.want...)
 				assertContains(t, err.Error(), "baton-freshdesk: GET /api/v2/"+name)
 				if strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), "Authorization") {
@@ -195,6 +221,21 @@ func TestFreshdeskAPIErrorMessage(t *testing.T) {
 			name: "documented body",
 			body: `{"description":"Validation failed","errors":[{"field":"email","message":"It should be a valid email","code":"invalid_value"}]}`,
 			want: []string{"Validation failed", "email: It should be a valid email (invalid_value)"},
+		},
+		{
+			name:    "flat body",
+			body:    `{"code":"account_suspended","message":"Your account has been suspended."}`,
+			exactly: "Your account has been suspended. (account_suspended)",
+		},
+		{
+			name:    "flat body without message",
+			body:    `{"code":"access_denied"}`,
+			exactly: "(access_denied)",
+		},
+		{
+			name:    "description wins over flat message",
+			body:    `{"description":"Validation failed","message":"ignored","errors":[{"field":"email","message":"It should be a valid email","code":"invalid_value"}]}`,
+			exactly: "Validation failed; email: It should be a valid email (invalid_value)",
 		},
 		{
 			name:    "errors without description",
